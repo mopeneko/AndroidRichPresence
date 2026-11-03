@@ -1,6 +1,14 @@
+import java.util.zip.ZipFile
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+}
+
+val monitorOnly = providers.gradleProperty("presenceMonitorOnly").map { it.toBooleanStrict() }.getOrElse(false)
+val discordSdk = file("libs/discord_partner_sdk.aar")
+if (!monitorOnly && !discordSdk.isFile) {
+    throw GradleException("Discord Social SDK 1.10+ の Android AAR を app/libs/discord_partner_sdk.aar に配置してください。監視だけをビルドする場合は -PpresenceMonitorOnly=true を明示してください。")
 }
 
 android {
@@ -19,6 +27,32 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    sourceSets.getByName("main").apply {
+        kotlin.directories.add(if (monitorOnly) "src/monitorOnly/java" else "src/discord/java")
+
+    }
+    if (!monitorOnly) {
+        sourceSets.getByName("debug").manifest.srcFile("src/discord/AndroidManifest.xml")
+        sourceSets.getByName("release").manifest.srcFile("src/discord/AndroidManifest.xml")
+        ndkVersion = "28.2.13676358"
+        externalNativeBuild {
+            cmake {
+                path = file("src/discord/cpp/CMakeLists.txt")
+                version = "3.22.1"
+            }
+        }
+        val archiveAbis = ZipFile(discordSdk).use { archive ->
+            archive.entries().asSequence().mapNotNull { entry ->
+                Regex("(?:jni/|prefab/modules/[^/]+/libs/android\\.)([^/]+)/.*\\.so")
+                    .matchEntire(entry.name)?.groupValues?.get(1)
+            }.toSet()
+        }
+        require(archiveAbis.isNotEmpty()) { "Discord AAR に Android のネイティブライブラリがありません。Android 用 SDK を配置してください。" }
+        defaultConfig {
+            ndk { abiFilters += archiveAbis }
+        }
+    }
+
     buildTypes {
         release {
             optimization {
@@ -33,10 +67,13 @@ android {
     }
     buildFeatures {
         compose = true
+        prefab = !monitorOnly
     }
 }
 
 dependencies {
+    implementation("androidx.browser:browser:1.8.0")
+    if (!monitorOnly) implementation(files(discordSdk))
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)

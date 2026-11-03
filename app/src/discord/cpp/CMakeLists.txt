@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.22.1)
+project(presence_bridge LANGUAGES CXX)
+find_package(discord_partner_sdk REQUIRED CONFIG)
+add_library(presence_bridge SHARED discord_bridge.cpp)
+target_compile_features(presence_bridge PRIVATE cxx_std_20)
+target_link_libraries(presence_bridge PRIVATE discord_partner_sdk::discord_partner_sdk)

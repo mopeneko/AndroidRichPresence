@@ -1,0 +1,248 @@
+package cc.lem0n.androidrichpresence.presence
+
+import org.junit.Assert.*
+import org.junit.Test
+
+class PresenceSessionTest {
+    private class Vault : TokenVault {
+        var stored: TokenLoad = TokenLoad.Empty
+        var writable = true
+        var markerWritable = true
+        var marked = false
+        var commits = 0
+        override fun load() = stored
+        override fun replace(tokens: SecretTokenPair): Boolean {
+            if (!writable) return false
+            commits++
+            stored = TokenLoad.Stored(SecretTokenPair(tokens.access.copyOf(), tokens.refresh.copyOf(), tokens.expiresAt))
+            marked = false
+            return true
+        }
+        override fun markRefreshing(): Boolean {
+            if (!markerWritable) return false
+            marked = true
+            stored = TokenLoad.RequiresLink
+            return true
+        }
+        override fun erase(): Boolean { stored = TokenLoad.Empty; return true }
+    }
+    private class Sdk : SdkPort {
+        override var available = true
+        override var isOpen = false
+        var generation = 0L
+        var ready = false
+        var opens = 0
+        var closes = 0
+        var installs = 0
+        var connects = 0
+        var refreshes = 0
+        var throwOnClear = false
+        val effects = mutableListOf<String>()
+        val updates = mutableListOf<Pair<Long, Presence>>()
+        override fun open(generation: Long) { check(!isOpen); isOpen = true; this.generation = generation; opens++ }
+        override fun authorize() { effects += "authorize" }
+        override fun install(access: ByteArray) { installs++; effects += "install" }
+        override fun refresh(refresh: ByteArray) { refreshes++; effects += "refresh" }
+        override fun connect() { connects++ }
+        override fun update(operation: Long, presence: Presence) {
+            check(ready)
+            updates += operation to presence
+            effects += "show:${presence.video.title}"
+        }
+        override fun clear(): Boolean {
+            if (!ready) return false
+            if (throwOnClear) throw IllegalStateException("Clear outcome unknown")
+            effects += "clear"
+            return true
+        }
+        override fun close() { if (isOpen) closes++; isOpen = false; ready = false }
+        override fun poll() = emptyList<SdkEvent>()
+    }
+    private class Fixture(val sdk: Sdk = Sdk(), val vault: Vault = Vault()) {
+        var time = 1_000_000L
+        var elapsedTime = 1_000_000L
+        var screen = ScreenState()
+        val session = PresenceSession(sdk, vault, elapsedNow = { elapsedTime }, epochNow = { time },
+            publish = { screen = it })
+        fun emit(event: SdkEvent) {
+            if (event is SdkEvent.Status) sdk.ready = event.ready
+            session.event(event)
+        }
+        fun tokens() = emit(SdkEvent.Tokens(sdk.generation, "fake-access".toByteArray(), "fake-refresh".toByteArray(), 3600))
+        fun ready() {
+            emit(SdkEvent.Installed(sdk.generation, true))
+            emit(SdkEvent.Status(sdk.generation, true))
+        }
+        fun link() { session.foregroundReady(); session.link(); tokens(); ready() }
+        fun playing(title: String = "A") {
+            session.settings(Settings(true))
+            session.source(Playback.Playing(Video(title)), true)
+        }
+        fun complete(success: Boolean = true) {
+            emit(SdkEvent.Completed(sdk.generation, sdk.updates.last().first, success))
+        }
+        fun advance(ms: Long) { time += ms; elapsedTime += ms; session.tick() }
+    }
+    @Test fun `source is visible without linking and nothing is sent`() {
+        val f = Fixture(); f.playing()
+        assertEquals(Playback.Playing(Video("A")), f.screen.playback)
+        assertEquals(0, f.sdk.opens); assertTrue(f.sdk.updates.isEmpty())
+    }
+    @Test fun `tokens must be durable then installed and ready before sending`() {
+        val f = Fixture(); f.playing(); f.session.foregroundReady(); f.session.link()
+        f.tokens()
+        assertEquals(1, f.vault.commits); assertEquals(1, f.sdk.installs)
+        assertEquals(0, f.sdk.connects); assertTrue(f.sdk.updates.isEmpty())
+        f.emit(SdkEvent.Installed(f.sdk.generation, true))
+        assertEquals(1, f.sdk.connects); assertTrue(f.sdk.updates.isEmpty())
+        f.emit(SdkEvent.Status(f.sdk.generation, true))
+        assertEquals("A", f.sdk.updates.single().second.video.title)
+    }
+    @Test fun `failed durable commit never installs or connects`() {
+        val f = Fixture(); f.vault.writable = false; f.session.foregroundReady(); f.session.link(); f.tokens()
+        assertEquals(0, f.sdk.installs); assertEquals(0, f.sdk.connects)
+        assertFalse(f.sdk.isOpen); assertTrue(f.screen.auth is Auth.Failed)
+    }
+    @Test fun `failed import never connects`() {
+        val f = Fixture(); f.session.foregroundReady(); f.session.link(); f.tokens()
+        f.emit(SdkEvent.Installed(f.sdk.generation, false))
+        assertEquals(0, f.sdk.connects); assertTrue(f.screen.auth is Auth.Failed)
+    }
+    @Test fun `latest media wins during connect and an inflight update`() {
+        val f = Fixture(); f.playing("A"); f.session.foregroundReady(); f.session.link()
+        f.playing("B"); f.tokens(); f.ready()
+        assertEquals(listOf("B"), f.sdk.updates.map { it.second.video.title })
+        f.playing("C"); f.playing("D")
+        assertEquals(1, f.sdk.updates.size)
+        f.complete()
+        assertEquals(listOf("B", "D"), f.sdk.updates.map { it.second.video.title })
+        f.complete(); assertEquals(Delivery.Accepted(Presence(Video("D"), true)), f.screen.delivery)
+    }
+    @Test fun `stop then restart preserves the clear barrier after inflight work`() {
+        val f = Fixture(); f.playing(); f.link()
+        f.session.source(Playback.NoSession, true); f.playing("B"); f.complete()
+        assertEquals(listOf("show:A", "clear", "show:B"), f.sdk.effects.filter { it == "clear" || it.startsWith("show:") })
+    }
+    @Test fun `sharing off then on clears before sending the same title again`() {
+        val f = Fixture(); f.playing(); f.link()
+        f.session.settings(Settings(false)); f.session.settings(Settings(true)); f.complete()
+        assertEquals(listOf("show:A", "clear", "show:A"), f.sdk.effects.filter { it == "clear" || it.startsWith("show:") })
+    }
+    @Test fun `missing source and buffering clear while pause stays paused`() {
+        val f = Fixture(); f.playing(); f.link(); f.complete()
+        f.session.source(Playback.Paused(Video("A")), true); f.complete(); f.advance(600_000)
+        assertEquals(Delivery.Accepted(Presence(Video("A"), false)), f.screen.delivery)
+        f.session.source(Playback.Buffering(Video("A")), true)
+        assertEquals("clear", f.sdk.effects.last())
+        f.playing("B"); f.complete(); f.session.source(Playback.NoSession, false)
+        assertEquals("clear", f.sdk.effects.last()); assertFalse(f.screen.connected)
+    }
+    @Test fun `timeout destroys the uncertain generation then publishes only newest media`() {
+        val f = Fixture(); f.playing(); f.link(); val oldGeneration = f.sdk.generation
+        val oldOperation = f.sdk.updates.single().first
+        f.playing("B"); f.advance(15_001)
+        assertFalse(f.sdk.isOpen); assertEquals(1, f.sdk.closes)
+        f.emit(SdkEvent.Completed(oldGeneration, oldOperation, true))
+        f.advance(1000); f.ready()
+        assertEquals("B", f.sdk.updates.last().second.video.title)
+        assertTrue(f.sdk.generation != oldGeneration)
+    }
+    @Test fun `native reconnect status invalidates readiness and pending deadline still expires`() {
+        val f = Fixture(); f.playing(); f.link()
+        f.emit(SdkEvent.Status(f.sdk.generation, false)); f.playing("B")
+        assertEquals(1, f.sdk.updates.size)
+        f.emit(SdkEvent.Status(f.sdk.generation, true)); f.advance(15_001)
+        assertFalse(f.sdk.isOpen)
+    }
+    @Test fun `retry budget is finite and metadata cannot reset it`() {
+        val f = Fixture(); f.playing(); f.link()
+        repeat(3) { index ->
+            f.complete(false)
+            repeat(20) { f.playing("changing-$it") }
+            f.advance(1000L shl index); f.ready()
+        }
+        f.complete(false)
+        val opens = f.sdk.opens
+        repeat(50) { f.playing("late-$it"); f.advance(10_000) }
+        assertEquals(opens, f.sdk.opens); assertTrue(f.screen.auth is Auth.Failed)
+        f.session.retry(); assertEquals(opens + 1, f.sdk.opens)
+    }
+    @Test fun `refresh is marked durable before request and replacement before import`() {
+        val f = Fixture(); f.link(); val oldGeneration = f.sdk.generation
+        f.emit(SdkEvent.Expired(oldGeneration))
+        assertTrue(f.vault.marked); assertEquals(1, f.sdk.refreshes)
+        assertEquals(1, f.sdk.installs)
+        f.tokens()
+        assertEquals(2, f.vault.commits); assertEquals(2, f.sdk.installs); assertFalse(f.vault.marked)
+    }
+    @Test fun `refresh marker failure never sends refresh and cannot silently reconnect`() {
+        val f = Fixture(); f.link(); f.vault.markerWritable = false
+        f.emit(SdkEvent.Expired(f.sdk.generation)); f.advance(100_000)
+        assertEquals(0, f.sdk.refreshes); assertFalse(f.sdk.isOpen); assertTrue(f.screen.auth is Auth.Failed)
+    }
+    @Test fun `refresh write failure discards rotated credentials`() {
+        val f = Fixture(); f.link(); f.emit(SdkEvent.Expired(f.sdk.generation)); f.vault.writable = false; f.tokens()
+        assertFalse(f.sdk.isOpen); assertEquals(1, f.sdk.installs); assertTrue(f.screen.auth is Auth.Failed)
+    }
+    @Test fun `normal saved link waits for foreground and restores without consent`() {
+        val vault = Vault().apply { stored = TokenLoad.Stored(SecretTokenPair(byteArrayOf(1), byteArrayOf(2), 9_000_000)) }
+        val f = Fixture(vault = vault)
+        assertEquals(Auth.NeedsForeground, f.screen.auth); assertEquals(0, f.sdk.opens)
+        f.session.foregroundReady(); f.ready()
+        assertEquals(Auth.Ready, f.screen.auth); assertFalse(f.sdk.effects.contains("authorize"))
+    }
+    @Test fun `restart during ambiguous refresh requires link`() {
+        val f = Fixture(vault = Vault().apply { stored = TokenLoad.RequiresLink })
+        f.session.foregroundReady(); f.session.retry(); f.advance(100_000)
+        assertEquals(0, f.sdk.opens); assertTrue(f.screen.auth is Auth.Failed)
+    }
+    @Test fun `unlink ignores late credential and ready callbacks and cancels retry`() {
+        val f = Fixture(); f.session.foregroundReady(); f.session.link(); val generation = f.sdk.generation
+        f.session.unlink()
+        val event = SdkEvent.Tokens(generation, byteArrayOf(11), byteArrayOf(12), 3600)
+        f.emit(event); f.emit(SdkEvent.Status(generation, true)); f.advance(100_000)
+        assertArrayEquals(byteArrayOf(0), event.access)
+        assertEquals(TokenLoad.Empty, f.vault.stored); assertEquals(0, f.sdk.installs); assertFalse(f.sdk.isOpen)
+        assertEquals(Auth.Unlinked, f.screen.auth)
+    }
+    @Test fun `sharing disabled blocks any resend through reconnect`() {
+        val f = Fixture(); f.playing(); f.link(); f.session.settings(Settings(false))
+        f.advance(15_001); f.advance(1000); f.ready()
+        assertEquals(1, f.sdk.updates.size); assertEquals("clear", f.sdk.effects.last())
+    }
+    @Test fun `wall clock rollback does not postpone update timeout`() {
+        val f = Fixture(); f.playing(); f.link()
+        f.time -= 86_400_000
+        f.advance(15_001)
+        assertFalse("Timed-out SDK client must close despite wall clock rollback", f.sdk.isOpen)
+    }
+    @Test fun `saved token expiry uses epoch time independently of elapsed time`() {
+        val f = Fixture(); f.elapsedTime = 500; f.link()
+        assertEquals(f.time + 3_600_000, (f.vault.stored as TokenLoad.Stored).tokens.expiresAt)
+    }
+    @Test fun `wall clock rollback does not postpone unlink close`() {
+        val f = Fixture(); f.link(); f.session.unlink()
+        f.time -= 86_400_000
+        f.advance(701)
+        assertFalse("Unlinked SDK client must close despite wall clock rollback", f.sdk.isOpen)
+    }
+    @Test fun `clear exception cannot prevent local credential deletion`() {
+        val f = Fixture(); f.link(); f.sdk.throwOnClear = true
+        runCatching { f.session.unlink() }.onFailure { f.session.failure() }
+        assertEquals(TokenLoad.Empty, f.vault.stored)
+        assertEquals(Auth.Unlinked, f.screen.auth)
+        f.advance(701)
+        assertFalse(f.sdk.isOpen)
+    }
+    @Test fun `monitor only never opens a client or loads credentials`() {
+        val f = Fixture(sdk = Sdk().apply { available = false })
+        f.playing(); f.session.foregroundReady(); f.session.link(); f.advance(1_000_000)
+        assertEquals(Auth.MonitorOnly, f.screen.auth); assertEquals(0, f.sdk.opens)
+    }
+    @Test fun `secret representations never reveal their contents`() {
+        val secret = SecretTokenPair("fake-secret".toByteArray(), "fake-refresh".toByteArray(), 1)
+        assertFalse(secret.toString().contains("fake-secret"))
+        assertEquals("動画: 猫", presenceTitle("猫"))
+        assertEquals(128, presenceTitle("😀".repeat(129)).codePointCount(0, presenceTitle("😀".repeat(129)).length))
+    }
+}
