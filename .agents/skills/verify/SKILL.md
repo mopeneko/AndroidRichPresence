@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Build and drive AndroidRichPresence on a reserved Android emulator to verify launch, source settings, notification access, playback, and Discord presence. Use for device UI verification after changes.
+description: Build and drive AndroidRichPresence primarily on the authorized physical Android device to verify launch, source settings, notification access, playback, and Discord presence. Use for device UI verification after changes.
 ---
 
 # Verify AndroidRichPresence
@@ -18,14 +18,15 @@ A monitor-only build cannot verify Discord authorization or delivery. Never subs
 
 ```sh
 ./gradlew :app:assembleDebug --console=plain
-android emulator list
 adb devices -l
 ```
 
-Choose an unused emulator. This workstation has `Pixel_10a`.
-If stopped, run `android emulator start Pixel_10a` and record that this run started it.
-Read its serial from `adb devices -l`, then set and export `VERIFY_SERIAL` to that serial.
-Do not double-drive a shared emulator. Do not assume its serial is always `emulator-5554`.
+Prefer the user-authorized physical device `<serial from adb devices -l>`, especially for Discord journeys that depend on existing authentication.
+Confirm it appears as `device` in `adb devices -l`, then set and export `VERIFY_SERIAL=<serial from adb devices -l>`.
+Use the existing installation and account state first. Do not treat an untested emulator login as evidence that real-device authentication is unavailable.
+For isolated checks without Discord authentication, `Pixel_10a` is an optional fallback.
+List emulators with `android emulator list`. If starting one, record ownership and read its actual serial from `adb devices -l`.
+Do not double-drive a shared device or assume an emulator serial.
 
 ```sh
 VERIFY_EVIDENCE=$(mktemp -d /tmp/android-rich-presence-proof.XXXXXX)
@@ -33,12 +34,16 @@ export VERIFY_EVIDENCE
 adb -s "$VERIFY_SERIAL" shell pm path cc.lem0n.androidrichpresence
 ```
 
-Record emulator and package ownership in `$VERIFY_EVIDENCE/ownership.txt`.
-If the app exists, establish that it is a disposable verification installation before replacing it.
-Prefer an absent package on a reserved emulator. Do not overwrite a personal installation or copy its credentials.
+Record device and package ownership in `$VERIFY_EVIDENCE/ownership.txt`.
+Preserve the physical device's existing installation, credentials, notification access, and source settings.
+For an existing installation, record its APK identity and build provenance. Do not claim it matches the checkout based on version alone.
+When the task calls for installing a new build, use a normal SDK build and `install -r` to retain app data.
+If an update fails, report it rather than uninstalling or clearing data. Never replace the authenticated installation with a monitor-only build.
+Use an absent package on an isolated emulator for checks that require fresh defaults. Do not copy account credentials between devices.
 Record initial notification access, source package, and sharing state. Discord journeys require a designated test account.
 
 ```sh
+# Only when installing the build is part of this verification task:
 adb -s "$VERIFY_SERIAL" install -r app/build/outputs/apk/debug/app-debug.apk
 adb -s "$VERIFY_SERIAL" shell am start -W -n cc.lem0n.androidrichpresence/.MainActivity > "$VERIFY_EVIDENCE/launch.txt"
 android layout --device="$VERIFY_SERIAL" -o "$VERIFY_EVIDENCE/launch-layout.json"
@@ -69,7 +74,8 @@ sha256sum app/build/outputs/apk/debug/app-debug.apk
 
 Expect `device`, boot completion `1`, and MainActivity resumed after launch.
 The template version is versionCode 1 and versionName 1.0. Version alone does not prove build identity.
-Retain the APK digest, successful install output, `git rev-parse HEAD`, and `git diff` with the evidence.
+Retain the APK digest, successful install output when applicable, `git rev-parse HEAD`, and `git diff` with the evidence.
+For an existing installation, use `pm path` to locate its APK and record its digest separately from the local build.
 
 ## Drive
 
@@ -97,7 +103,8 @@ Read their prerequisites in the feature map before running them. This skill does
 
 Pause any media started by the run and close its authorization tab. Restore changed source, sharing, and notification access on retained installations.
 Unlink only a test account linked by this run. Unlinking deletes local credentials but does not revoke Discord's OAuth grant.
-Force-stop only this package on the reserved emulator with `adb -s "$VERIFY_SERIAL" shell am force-stop cc.lem0n.androidrichpresence`.
+On a disposable emulator installation, force-stop this package with `adb -s "$VERIFY_SERIAL" shell am force-stop cc.lem0n.androidrichpresence`.
+On the physical device, preserve services and playback that were running before verification. Do not force-stop them as routine cleanup.
 If this run installed an absent package, run `adb -s "$VERIFY_SERIAL" uninstall cc.lem0n.androidrichpresence`.
 Preserve pre-existing installations and their data.
 If this run started Pixel_10a, run `android emulator stop Pixel_10a`. Leave previously running devices alone.
