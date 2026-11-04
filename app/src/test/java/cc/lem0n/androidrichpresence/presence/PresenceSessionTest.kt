@@ -395,7 +395,34 @@ class PresenceSessionTest {
     @Test fun `secret representations never reveal their contents`() {
         val secret = SecretTokenPair("fake-secret".toByteArray(), "fake-refresh".toByteArray(), 1)
         assertFalse(secret.toString().contains("fake-secret"))
+    }
+    @Test fun `presence title fits Discord UTF-8 limit for the rejected Japanese video`() {
+        val title = "【雑談/chat】初見さんも大歓迎！マシンガントークでしゃべりまくります【茶々プラムム/vtuber】"
+        assertEquals(
+            "【雑談/chat】初見さんも大歓迎！マシンガントークでしゃべりまくります【茶々プラムム/vtuber",
+            presenceTitle(title),
+        )
+        val f = Fixture(); f.playing(title)
+        assertEquals(Playback.Playing(Video(title)), f.screen.playback)
+    }
+    @Test fun `presence title preserves complete Japanese characters and emoji at byte limit`() {
+        assertEquals("猫".repeat(42), presenceTitle("猫".repeat(43)))
+        assertEquals("😀".repeat(32), presenceTitle("😀".repeat(129)))
+        assertEquals("A".repeat(124) + "😀", presenceTitle("A".repeat(124) + "😀B"))
+        assertEquals("A".repeat(125), presenceTitle("A".repeat(125) + "😀B"))
+        assertEquals("A".repeat(125) + "猫", presenceTitle("A".repeat(125) + "猫B"))
+        assertEquals("A".repeat(126), presenceTitle("A".repeat(126) + "猫B"))
+        assertEquals("A".repeat(126) + "é", presenceTitle("A".repeat(126) + "éB"))
+        assertEquals("A".repeat(127), presenceTitle("A".repeat(127) + "éB"))
+    }
+    @Test fun `presence title keeps ASCII titles through 128 bytes and trims whitespace`() {
+        assertEquals("AB", presenceTitle(" AB "))
+        assertEquals("A".repeat(128), presenceTitle("A".repeat(128)))
+        assertEquals("A".repeat(128), presenceTitle("A".repeat(129)))
+    }
+    @Test fun `presence title retains single character prefix`() {
+        assertEquals("動画: A", presenceTitle(" A "))
         assertEquals("動画: 猫", presenceTitle("猫"))
-        assertEquals(128, presenceTitle("😀".repeat(129)).codePointCount(0, presenceTitle("😀".repeat(129)).length))
+        assertEquals("動画: 😀", presenceTitle("😀"))
     }
 }
