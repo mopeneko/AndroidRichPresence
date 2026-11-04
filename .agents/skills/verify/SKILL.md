@@ -1,17 +1,20 @@
 ---
 name: verify
-description: Build and drive AndroidRichPresence on an Android emulator and capture greeting and app-resume behavior. Use for device UI verification after changes.
+description: Build and drive AndroidRichPresence on a reserved Android emulator to verify launch, source settings, notification access, playback, and Discord presence. Use for device UI verification after changes.
 ---
 
 # Verify AndroidRichPresence
 
 Run from the repository root. Read [the feature map](features/README.md).
-The app currently displays `Hello Android!`. It has no Discord login, presence service, or settings.
+The app displays `YouTube Presence`, monitors a selected YouTube app, and can share playback with a linked Discord account.
 
 ## Launch
 
 Use the installed Android CLI and adb. Consult the android-cli skill if commands change.
 The wrapper selects Gradle 9.6.0 and a Java 25 daemon. Android SDK platform 37 and Gradle dependencies are required.
+The normal build also requires `app/libs/discord_partner_sdk.aar`, NDK `28.2.13676358`, and CMake `3.22.1`.
+If the AAR is unavailable, explicitly choose `-PpresenceMonitorOnly=true` for the build below and record that choice.
+A monitor-only build cannot verify Discord authorization or delivery. Never substitute it silently.
 
 ```sh
 ./gradlew :app:assembleDebug --console=plain
@@ -32,7 +35,8 @@ adb -s "$VERIFY_SERIAL" shell pm path cc.lem0n.androidrichpresence
 
 Record emulator and package ownership in `$VERIFY_EVIDENCE/ownership.txt`.
 If the app exists, establish that it is a disposable verification installation before replacing it.
-No credentials, seed data, ports, or migrations are required.
+Prefer an absent package on a reserved emulator. Do not overwrite a personal installation or copy its credentials.
+Record initial notification access, source package, and sharing state. Discord journeys require a designated test account.
 
 ```sh
 adb -s "$VERIFY_SERIAL" install -r app/build/outputs/apk/debug/app-debug.apk
@@ -40,12 +44,20 @@ adb -s "$VERIFY_SERIAL" shell am start -W -n cc.lem0n.androidrichpresence/.MainA
 android layout --device="$VERIFY_SERIAL" -o "$VERIFY_EVIDENCE/launch-layout.json"
 ```
 
-Ready means launch reports success and a visible `Hello Android!` appears in the layout.
+Ready means launch reports success, MainActivity is resumed, and a visible `YouTube Presence` appears in the layout.
 If capture precedes rendering, wait briefly and capture again. Do not change expectations to hide a failure.
+Check the actual foreground activity. `Status: ok` can still bring an existing Settings activity to the front.
+After returning from external settings, press Back until MainActivity is visible. If the task remains stuck, reset its stack:
+
+```sh
+adb -s "$VERIFY_SERIAL" shell am start -W --activity-clear-top -n cc.lem0n.androidrichpresence/.MainActivity
+```
+
+Capture the layout again before further input. Derive tap coordinates from the current layout, never a previous run.
 
 ## Doctor
 
-Run these read-only checks when anything looks wrong.
+Run these read-only checks before the first drive and after any failed or surprising drive.
 
 ```sh
 adb -s "$VERIFY_SERIAL" get-state
@@ -61,29 +73,36 @@ Retain the APK digest, successful install output, `git rev-parse HEAD`, and `git
 
 ## Drive
 
-Follow [greeting and resume](features/greeting.md). The stable handle is literal text `Hello Android!`.
-There are no buttons or editable fields. Exercise the real activity through Android actions, not internal Compose setters.
+Follow every journey in [the feature map](features/README.md). The stable launch handle is literal text `YouTube Presence`.
+Drive the real activity through Android actions. Scroll to reach controls below the screen.
+For each journey, record observed results or the attempted route and concrete missing prerequisite.
+An unreachable authenticated flow does not prove delivery or background recovery.
 
 ## Evidence
 
 Keep action logs, launch output, before and after layouts, activity state, APK identity, and a screenshot in `$VERIFY_EVIDENCE`.
 
 ```sh
-android screen capture --device="$VERIFY_SERIAL" -o "$VERIFY_EVIDENCE/greeting.png"
+android screen capture --device="$VERIFY_SERIAL" -o "$VERIFY_EVIDENCE/launch.png"
 ```
 
-Visually inspect the PNG. Confirm the greeting is visible without a covering dialog.
-Check the action and resulting state together. This template changes no app data and has no external side effects.
-Add side-effect checks when features appear. Mocks do not prove delivery to Discord.
+Visually inspect the PNG. Confirm `YouTube Presence` is visible without a covering dialog.
+Check the action and resulting state together. Settings persist and authorized sharing changes a Discord profile.
+Service diagnostics expose video titles. Review evidence before sharing it and avoid capturing credentials or authorization codes.
+SDK acceptance does not prove profile display. Inspect a separate Discord client to prove the remote result.
+The repository's `scripts/verify_youtube.py`, `verify_lifecycle.py`, and `verify_background.py` supply optional deeper checks.
+Read their prerequisites in the feature map before running them. This skill does not own those scripts.
 
 ## Cleanup
 
+Pause any media started by the run and close its authorization tab. Restore changed source, sharing, and notification access on retained installations.
+Unlink only a test account linked by this run. Unlinking deletes local credentials but does not revoke Discord's OAuth grant.
 Force-stop only this package on the reserved emulator with `adb -s "$VERIFY_SERIAL" shell am force-stop cc.lem0n.androidrichpresence`.
 If this run installed an absent package, run `adb -s "$VERIFY_SERIAL" uninstall cc.lem0n.androidrichpresence`.
 Preserve pre-existing installations and their data.
 If this run started Pixel_10a, run `android emulator stop Pixel_10a`. Leave previously running devices alone.
 Never clear app data or kill processes by name as generic cleanup.
-Confirm that launch output, both layouts, and the screenshot survive in `$VERIFY_EVIDENCE`.
+Confirm that launch output, before and after layouts, screenshots, and any script results survive in `$VERIFY_EVIDENCE`.
 Evidence under `/tmp` may disappear on reboot. Copy it elsewhere if long-term retention is needed.
 
 ## Maintenance
