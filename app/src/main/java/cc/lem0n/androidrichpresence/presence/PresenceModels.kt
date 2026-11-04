@@ -54,6 +54,9 @@ fun presenceTitle(title: String): String {
     val clean = title.trim()
     val length = clean.codePointCount(0, clean.length)
     if (length == 1) return "動画: $clean"
-    val end = clean.offsetByCodePoints(0, minOf(128, length))
-    return clean.substring(0, end)
+    val utf8 = clean.toByteArray(Charsets.UTF_8)
+    if (utf8.size <= 128) return clean
+    var end = 128
+    while (utf8[end].toInt() and 0xC0 == 0x80) end--
+    return String(utf8, 0, end, Charsets.UTF_8)
 }
