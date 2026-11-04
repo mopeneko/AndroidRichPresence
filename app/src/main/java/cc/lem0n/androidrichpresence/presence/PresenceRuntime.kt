@@ -1,6 +1,9 @@
 package cc.lem0n.androidrichpresence.presence
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.SystemClock
@@ -13,11 +16,18 @@ class PresenceRuntime private constructor(context: Context) {
             instance ?: PresenceRuntime(context.applicationContext).also { instance = it }
         }
     }
+    init { DiscordBridge.initializeBackground(context) }
+    private val connectivity = context.getSystemService(ConnectivityManager::class.java)
     private val worker = HandlerThread("DiscordPresence").apply { start() }
     private val handler = Handler(worker.looper)
     private val bridge = DiscordBridge()
     private lateinit var session: PresenceSession
     private var scheduled = false
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) = networkChanged()
+        override fun onLost(network: Network) = networkChanged()
+        override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) = networkChanged()
+    }
     private val pump = Runnable {
         scheduled = false
         execute {
@@ -30,8 +40,11 @@ class PresenceRuntime private constructor(context: Context) {
             session = PresenceSession(bridge, EncryptedTokenVault(context),
                 elapsedNow = SystemClock::elapsedRealtime, epochNow = System::currentTimeMillis,
                 publish = PresenceStore::publish)
-            session.settings(PresenceStore.settings(context))
-            schedule()
+            execute {
+                connectivity.registerDefaultNetworkCallback(networkCallback)
+                session.networkChanged(networkAvailable())
+                session.settings(PresenceStore.settings(context))
+            }
         }
     }
     fun foregroundReady() = post { foregroundReady() }
@@ -40,6 +53,12 @@ class PresenceRuntime private constructor(context: Context) {
     fun retry() = post { retry() }
     fun settings(value: Settings) = post { settings(value) }
     fun source(playback: Playback, connected: Boolean) = post { source(playback, connected) }
+    private fun networkChanged() = post { networkChanged(networkAvailable()) }
+    private fun networkAvailable(): Boolean {
+        val capabilities = connectivity.getNetworkCapabilities(connectivity.activeNetwork) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    }
     private fun post(action: PresenceSession.() -> Unit) {
         handler.post { execute { session.action() } }
     }

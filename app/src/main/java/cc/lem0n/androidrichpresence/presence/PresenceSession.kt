@@ -12,9 +12,13 @@ internal class PresenceSession(
     private var tokens: SecretTokenPair? = null
     private var wanted = false
     private var foreground = false
+    private var networkAvailable = true
+    private var refreshRequired = false
     private var generation = 0L
     private var nextOperation = 0L
-    private var pending: Pair<Long, Presence>? = null
+    private data class Pending(val operation: Long, val presence: Presence, val connection: Long)
+    private var connection = 0L
+    private var pending: Pending? = null
     private var accepted: Presence? = null
     private var clearBarrier = false
     private var cleared = false
@@ -34,7 +38,7 @@ internal class PresenceSession(
             is TokenLoad.Stored -> {
                 tokens = saved.tokens
                 wanted = true
-                state = state.copy(auth = Auth.NeedsForeground)
+                state = state.copy(auth = Auth.Connecting)
             }
         }
         render()
@@ -50,7 +54,23 @@ internal class PresenceSession(
         val previous = desired()
         settings = value
         if (previous != null && desired() == null) clearBarrier = true
+        if (wanted && !sdk.isOpen && retryAt == 0L && closeAt == 0L) restore()
         reconcile()
+    }
+
+    fun networkChanged(available: Boolean) {
+        if (networkAvailable == available) return
+        networkAvailable = available
+        if (available && wanted && closeAt == 0L) {
+            if (!sdk.isOpen || state.auth == Auth.Connecting) {
+                retryAt = 0
+                destroyClient()
+                restore()
+            } else if (ready && (refreshRequired || tokens?.let { epochNow() >= it.expiresAt - 60_000 } == true)) {
+                beginRefresh()
+            }
+        }
+        render()
     }
 
     fun source(playback: Playback, connected: Boolean) {
@@ -70,6 +90,7 @@ internal class PresenceSession(
         destroyClient()
         tokens?.destroy()
         tokens = null
+        refreshRequired = false
         if (!vault.erase()) { requireLink("連携情報を保存できません。端末の空き容量を確認してください"); return }
         open()
         state = state.copy(auth = Auth.Authorizing)
@@ -96,6 +117,7 @@ internal class PresenceSession(
         }
         tokens?.destroy()
         tokens = null
+        refreshRequired = false
         val erased = vault.erase()
         state = state.copy(auth = if (erased) Auth.Unlinked else Auth.Failed("連携情報の削除に失敗しました。もう一度解除してください"), operation = 0)
         closeAt = if (sdk.isOpen) elapsedNow() + 700 else 0
@@ -103,7 +125,7 @@ internal class PresenceSession(
     }
 
     fun retry() {
-        if (!wanted || tokens == null || closeAt != 0L) return
+        if (!wanted || tokens == null || closeAt != 0L || state.auth == Auth.Refreshing) return
         retries = 0
         retryAt = 0
         destroyClient()
@@ -130,11 +152,12 @@ internal class PresenceSession(
                 }
                 tokens?.destroy()
                 tokens = replacement
+                refreshRequired = false
                 install(replacement)
             }
             is SdkEvent.Installed -> {
                 if (state.auth != Auth.Installing) return
-                if (!event.success) { requireLink("認証の有効期限が切れました。再連携してください"); return }
+                if (!event.success) { recover(); return }
                 state = state.copy(auth = Auth.Connecting)
                 deadline = elapsedNow() + 20_000
                 sdk.connect()
@@ -146,6 +169,9 @@ internal class PresenceSession(
                     state = state.copy(auth = Auth.Ready)
                 } else if (!event.ready) {
                     ready = false
+                    ++connection
+                    accepted = null
+                    cleared = false
                     if (state.auth == Auth.Ready) {
                         state = state.copy(auth = Auth.Connecting)
                         deadline = elapsedNow() + 20_000
@@ -154,15 +180,15 @@ internal class PresenceSession(
             }
             is SdkEvent.Expired -> if (state.auth !in listOf(Auth.Refreshing, Auth.Installing)) beginRefresh()
             is SdkEvent.Completed -> {
-                val operation = pending?.takeIf { it.first == event.operation } ?: return
+                val operation = pending?.takeIf { it.operation == event.operation } ?: return
                 pending = null
                 pendingDeadline = 0
                 state = state.copy(operation = 0)
                 if (!event.success) { recover(); return }
-                accepted = operation.second
+                accepted = operation.presence.takeIf { ready && operation.connection == connection }
                 retries = 0
-                if (desired() == accepted && !clearBarrier)
-                    state = state.copy(delivery = Delivery.Accepted(operation.second))
+                if (ready && desired() == accepted && !clearBarrier)
+                    state = state.copy(delivery = Delivery.Accepted(operation.presence))
             }
             is SdkEvent.AuthFailed -> { requireLink("認証が完了しませんでした。Discord と再連携してください"); return }
         }
@@ -179,7 +205,7 @@ internal class PresenceSession(
         if (retryAt != 0L && time >= retryAt) { retryAt = 0; restore() }
         if (pendingDeadline != 0L && time >= pendingDeadline) { recover(); return }
         if (deadline != 0L && time >= deadline) {
-            if (state.auth in listOf(Auth.Authorizing, Auth.Exchanging, Auth.Refreshing, Auth.Installing))
+            if (state.auth in listOf(Auth.Authorizing, Auth.Exchanging, Auth.Refreshing))
                 requireLink("認証を完了できませんでした。再連携してください")
             else recover()
             return
@@ -189,7 +215,7 @@ internal class PresenceSession(
     }
 
     fun failure() {
-        if (state.auth in listOf(Auth.Authorizing, Auth.Exchanging, Auth.Refreshing, Auth.Installing))
+        if (state.auth in listOf(Auth.Authorizing, Auth.Exchanging, Auth.Refreshing))
             requireLink("認証を完了できませんでした。再連携してください")
         else if (wanted) recover()
         else { destroyClient(); render() }
@@ -206,13 +232,16 @@ internal class PresenceSession(
         sdk.install(value.access)
     }
     private fun restore() {
-        if (!foreground) { state = state.copy(auth = Auth.NeedsForeground); render(); return }
+        if (!networkAvailable) return
         val saved = tokens ?: return
         open()
-        if (saved.expiresAt <= epochNow() + 60_000) beginRefresh() else install(saved)
+        if (refreshRequired || saved.expiresAt <= epochNow() + 60_000) beginRefresh() else install(saved)
     }
     private fun beginRefresh() {
         val saved = tokens ?: return
+        refreshRequired = true
+        if (!networkAvailable) return
+        refreshRequired = false
         destroyClient()
         open()
         state = state.copy(auth = Auth.Refreshing, operation = 0)
@@ -243,14 +272,9 @@ internal class PresenceSession(
     private fun recover() {
         destroyClient()
         if (!wanted || tokens == null) return
-        if (retries >= 3) {
-            state = state.copy(auth = Auth.Failed("接続を回復できませんでした。再試行してください"),
-                delivery = Delivery.Failed("Discord への送信に失敗しました"))
-        } else {
-            ++retries
-            retryAt = elapsedNow() + (1000L shl (retries - 1))
-            state = state.copy(auth = Auth.Connecting, delivery = Delivery.Recovering(retries))
-        }
+        retries = if (retries == Int.MAX_VALUE) retries else retries + 1
+        retryAt = elapsedNow() + minOf(60_000L, 1000L shl minOf(retries - 1, 6))
+        state = state.copy(auth = Auth.Connecting, delivery = Delivery.Recovering(retries))
         render()
     }
     private fun reconcile() {
@@ -269,7 +293,7 @@ internal class PresenceSession(
             val target = desired()
             if (pending == null && !clearBarrier && target != null && target != accepted) {
                 val operation = ++nextOperation
-                pending = operation to target
+                pending = Pending(operation, target, connection)
                 cleared = false
                 pendingDeadline = elapsedNow() + 15_000
                 state = state.copy(operation = operation, delivery = Delivery.Updating)

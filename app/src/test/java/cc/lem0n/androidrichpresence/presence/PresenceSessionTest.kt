@@ -103,10 +103,24 @@ class PresenceSessionTest {
         assertEquals(0, f.sdk.installs); assertEquals(0, f.sdk.connects)
         assertFalse(f.sdk.isOpen); assertTrue(f.screen.auth is Auth.Failed)
     }
-    @Test fun `failed import never connects`() {
-        val f = Fixture(); f.session.foregroundReady(); f.session.link(); f.tokens()
+    @Test fun `transient import failure preserves credentials and retries before connecting`() {
+        val f = Fixture(); f.playing(); f.session.foregroundReady(); f.session.link(); f.tokens()
         f.emit(SdkEvent.Installed(f.sdk.generation, false))
-        assertEquals(0, f.sdk.connects); assertTrue(f.screen.auth is Auth.Failed)
+        assertEquals(0, f.sdk.connects)
+        assertFalse(f.sdk.isOpen)
+        assertTrue(f.vault.stored is TokenLoad.Stored)
+        assertEquals(Auth.Connecting, f.screen.auth)
+        f.advance(999)
+        assertEquals(1, f.sdk.installs)
+        f.advance(1)
+        assertEquals(2, f.sdk.installs)
+        assertEquals(0, f.sdk.connects)
+        f.ready(); f.complete()
+        assertEquals(1, f.sdk.connects)
+        assertEquals(Auth.Ready, f.screen.auth)
+        assertEquals(Delivery.Accepted(Presence(Video("A"), true)), f.screen.delivery)
+        assertEquals(1, f.vault.commits)
+        assertEquals(1, f.sdk.effects.count { it == "authorize" })
     }
     @Test fun `latest media wins during connect and an inflight update`() {
         val f = Fixture(); f.playing("A"); f.session.foregroundReady(); f.session.link()
@@ -154,18 +168,45 @@ class PresenceSessionTest {
         f.emit(SdkEvent.Status(f.sdk.generation, true)); f.advance(15_001)
         assertFalse(f.sdk.isOpen)
     }
-    @Test fun `retry budget is finite and metadata cannot reset it`() {
+    @Test fun `prolonged outage keeps retrying with capped backoff and recovers without user action`() {
         val f = Fixture(); f.playing(); f.link()
-        repeat(3) { index ->
+        val retryDelays = listOf(1000L, 2000L, 4000L, 8000L, 16_000L, 32_000L) + List(14) { 60_000L }
+        retryDelays.forEachIndexed { index, delay ->
             f.complete(false)
             repeat(20) { f.playing("changing-$it") }
-            f.advance(1000L shl index); f.ready()
+            val opens = f.sdk.opens
+            f.advance(delay - 1)
+            assertEquals("Retry ${index + 1} must wait for its backoff", opens, f.sdk.opens)
+            f.advance(1)
+            assertEquals("Retry ${index + 1} must resume automatically", opens + 1, f.sdk.opens)
+            f.ready()
         }
-        f.complete(false)
-        val opens = f.sdk.opens
-        repeat(50) { f.playing("late-$it"); f.advance(10_000) }
-        assertEquals(opens, f.sdk.opens); assertTrue(f.screen.auth is Auth.Failed)
-        f.session.retry(); assertEquals(opens + 1, f.sdk.opens)
+        f.complete()
+        assertEquals(Auth.Ready, f.screen.auth)
+        assertEquals(Delivery.Accepted(Presence(Video("changing-19"), true)), f.screen.delivery)
+        assertEquals(1, f.sdk.effects.count { it == "authorize" })
+    }
+    @Test fun `native reconnection resends previously accepted current media`() {
+        val f = Fixture(); f.playing(); f.link(); f.complete()
+        f.emit(SdkEvent.Status(f.sdk.generation, false))
+        f.emit(SdkEvent.Status(f.sdk.generation, true))
+        assertEquals(listOf("A", "A"), f.sdk.updates.map { it.second.video.title })
+        f.complete()
+        assertEquals(Delivery.Accepted(Presence(Video("A"), true)), f.screen.delivery)
+    }
+    @Test fun `completion from before native disconnect resends current media after reconnect`() {
+        listOf("A", "B").forEach { title ->
+            val f = Fixture(); f.playing(); f.link()
+            f.emit(SdkEvent.Status(f.sdk.generation, false))
+            f.playing(title)
+            f.emit(SdkEvent.Status(f.sdk.generation, true))
+            assertEquals(1, f.sdk.updates.size)
+            f.complete()
+            assertEquals(listOf("A", title), f.sdk.updates.map { it.second.video.title })
+            assertEquals(Delivery.Updating, f.screen.delivery)
+            f.complete()
+            assertEquals(Delivery.Accepted(Presence(Video(title), true)), f.screen.delivery)
+        }
     }
     @Test fun `refresh is marked durable before request and replacement before import`() {
         val f = Fixture(); f.link(); val oldGeneration = f.sdk.generation
@@ -184,12 +225,124 @@ class PresenceSessionTest {
         val f = Fixture(); f.link(); f.emit(SdkEvent.Expired(f.sdk.generation)); f.vault.writable = false; f.tokens()
         assertFalse(f.sdk.isOpen); assertEquals(1, f.sdk.installs); assertTrue(f.screen.auth is Auth.Failed)
     }
-    @Test fun `normal saved link waits for foreground and restores without consent`() {
+    @Test fun `ambiguous refresh timeout cannot replay the consumed credentials`() {
+        val f = Fixture(); f.link(); f.emit(SdkEvent.Expired(f.sdk.generation))
+        f.advance(20_001)
+        assertTrue(f.screen.auth is Auth.Failed)
+        assertEquals(TokenLoad.Empty, f.vault.stored)
+        f.session.retry(); f.session.networkChanged(false); f.session.networkChanged(true)
+        f.advance(120_000)
+        assertEquals(1, f.sdk.refreshes)
+        assertFalse(f.sdk.isOpen)
+    }
+    @Test fun `saved link restores at settings initialization without foreground or consent`() {
         val vault = Vault().apply { stored = TokenLoad.Stored(SecretTokenPair(byteArrayOf(1), byteArrayOf(2), 9_000_000)) }
         val f = Fixture(vault = vault)
-        assertEquals(Auth.NeedsForeground, f.screen.auth); assertEquals(0, f.sdk.opens)
-        f.session.foregroundReady(); f.ready()
+        f.session.settings(Settings(true))
+        assertEquals(1, f.sdk.installs)
+        f.session.source(Playback.Playing(Video("A")), true)
+        f.ready()
         assertEquals(Auth.Ready, f.screen.auth); assertFalse(f.sdk.effects.contains("authorize"))
+        assertEquals("A", f.sdk.updates.single().second.video.title)
+    }
+    @Test fun `expired saved access refreshes in background at settings initialization`() {
+        val vault = Vault().apply { stored = TokenLoad.Stored(SecretTokenPair(byteArrayOf(1), byteArrayOf(2), 999_999)) }
+        val f = Fixture(vault = vault)
+        f.session.settings(Settings(true))
+        assertEquals(1, f.sdk.refreshes)
+        assertTrue(f.vault.marked)
+        assertEquals(0, f.sdk.installs)
+        assertFalse(f.sdk.effects.contains("authorize"))
+        f.tokens(); f.ready()
+        assertEquals(Auth.Ready, f.screen.auth)
+        assertEquals(1, f.vault.commits)
+        assertFalse(f.vault.marked)
+    }
+    @Test fun `offline expired saved credentials wait for network before background refresh`() {
+        val vault = Vault().apply { stored = TokenLoad.Stored(SecretTokenPair(byteArrayOf(1), byteArrayOf(2), 999_999)) }
+        val f = Fixture(vault = vault)
+        f.session.networkChanged(false)
+        f.session.settings(Settings(true))
+        f.session.source(Playback.Playing(Video("A")), true)
+        f.advance(3_600_000)
+        assertEquals(0, f.sdk.opens)
+        assertEquals(0, f.sdk.refreshes)
+        assertFalse(f.vault.marked)
+        assertTrue(f.vault.stored is TokenLoad.Stored)
+        f.session.networkChanged(true)
+        assertEquals(1, f.sdk.refreshes)
+        assertTrue(f.vault.marked)
+        assertEquals(0, f.sdk.installs)
+        f.tokens()
+        assertEquals(1, f.vault.commits)
+        assertFalse(f.vault.marked)
+        assertEquals(1, f.sdk.installs)
+        f.ready(); f.complete()
+        assertEquals(Auth.Ready, f.screen.auth)
+        assertEquals(Delivery.Accepted(Presence(Video("A"), true)), f.screen.delivery)
+        assertFalse(f.sdk.effects.contains("authorize"))
+    }
+    @Test fun `unlink during offline backoff cancels recovery when network returns`() {
+        val f = Fixture(); f.playing(); f.link(); f.complete(false)
+        f.session.networkChanged(false)
+        f.advance(500)
+        f.session.unlink()
+        val opens = f.sdk.opens
+        f.advance(3_600_000)
+        f.session.networkChanged(true)
+        f.advance(3_600_000)
+        assertEquals(opens, f.sdk.opens)
+        assertEquals(1, f.sdk.installs)
+        assertEquals(TokenLoad.Empty, f.vault.stored)
+        assertEquals(Auth.Unlinked, f.screen.auth)
+        assertFalse(f.sdk.isOpen)
+    }
+    @Test fun `network loss during refresh never replays the rotating refresh token`() {
+        val f = Fixture(); f.link()
+        f.emit(SdkEvent.Expired(f.sdk.generation))
+        val refreshGeneration = f.sdk.generation
+        val opens = f.sdk.opens
+        f.session.networkChanged(false)
+        f.advance(1000)
+        f.session.networkChanged(true)
+        assertEquals(1, f.sdk.refreshes)
+        assertEquals(opens, f.sdk.opens)
+        assertEquals(refreshGeneration, f.sdk.generation)
+        assertTrue(f.vault.marked)
+        f.tokens(); f.ready()
+        assertEquals(Auth.Ready, f.screen.auth)
+        assertEquals(2, f.vault.commits)
+        assertFalse(f.vault.marked)
+        assertEquals(1, f.sdk.refreshes)
+    }
+    @Test fun `repeated network availability callbacks open only one recovery client`() {
+        val f = Fixture(); f.playing(); f.link(); f.complete(false)
+        f.session.networkChanged(false)
+        f.advance(60_000)
+        val opens = f.sdk.opens
+        assertFalse(f.sdk.isOpen)
+        repeat(10) { f.session.networkChanged(true) }
+        assertEquals(opens + 1, f.sdk.opens)
+        assertEquals(2, f.sdk.installs)
+        assertEquals(1, f.sdk.connects)
+        f.ready(); f.complete()
+        repeat(10) { f.session.networkChanged(true) }
+        assertEquals(opens + 1, f.sdk.opens)
+        assertEquals(Auth.Ready, f.screen.auth)
+        assertEquals(Delivery.Accepted(Presence(Video("A"), true)), f.screen.delivery)
+    }
+    @Test fun `disabled sharing stays disabled when saved link restores in background`() {
+        val vault = Vault().apply { stored = TokenLoad.Stored(SecretTokenPair(byteArrayOf(1), byteArrayOf(2), 9_000_000)) }
+        val f = Fixture(vault = vault)
+        f.session.settings(Settings(false))
+        assertEquals(1, f.sdk.installs)
+        f.session.source(Playback.Playing(Video("A")), true)
+        f.ready()
+        f.emit(SdkEvent.Status(f.sdk.generation, false))
+        f.emit(SdkEvent.Status(f.sdk.generation, true))
+        assertEquals(Auth.Ready, f.screen.auth)
+        assertTrue(f.sdk.updates.isEmpty())
+        assertFalse(f.sdk.effects.contains("authorize"))
     }
     @Test fun `restart during ambiguous refresh requires link`() {
         val f = Fixture(vault = Vault().apply { stored = TokenLoad.RequiresLink })

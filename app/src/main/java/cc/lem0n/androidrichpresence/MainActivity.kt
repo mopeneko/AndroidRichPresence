@@ -123,6 +123,11 @@ class MainActivity : ComponentActivity() {
             PresenceRuntime.get(this).foregroundReady()
         PresenceStore.refresh?.invoke()
     }
+
+    override fun onPause() {
+        DiscordBridge.detach(this)
+        super.onPause()
+    }
 }
 
 @Composable
@@ -148,7 +153,7 @@ private fun StatusCard(screen: ScreenState) {
                 Delivery.ClearRequested -> "表示の消去を要求しました。Discord 側の消去は未確認です"
                 is Delivery.Accepted -> "Discord が更新を受け付けました。プロフィールの表示は Discord で確認してください"
                 is Delivery.Failed -> delivery.reason
-                is Delivery.Recovering -> "Discord に再接続しています（${delivery.attempt}/3）"
+                is Delivery.Recovering -> "Discord に再接続しています（${delivery.attempt} 回目）"
             })
         }
     }
