@@ -142,7 +142,7 @@ class YouTubeNotificationListener : NotificationListenerService() {
         writer.println("authenticated=${screen.auth == cc.lem0n.androidrichpresence.presence.Auth.Ready}")
         writer.println("operation=${screen.operation}")
         writer.println("delivery=${screen.delivery}")
-        writer.println("blockedReason=${screen.blockedReason}")
+        writer.println("blockedReason=${screen.blocker}")
     }
 
     override fun onListenerDisconnected() { disconnect(); super.onListenerDisconnected() }

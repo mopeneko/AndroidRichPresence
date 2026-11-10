@@ -101,7 +101,7 @@ class PresenceSessionTest {
     @Test fun `failed durable commit never installs or connects`() {
         val f = Fixture(); f.vault.writable = false; f.session.foregroundReady(); f.session.link(); f.tokens()
         assertEquals(0, f.sdk.installs); assertEquals(0, f.sdk.connects)
-        assertFalse(f.sdk.isOpen); assertTrue(f.screen.auth is Auth.Failed)
+        assertFalse(f.sdk.isOpen); assertEquals(Auth.Failed(AuthIssue.StorageWriteFailed), f.screen.auth)
     }
     @Test fun `transient import failure preserves credentials and retries before connecting`() {
         val f = Fixture(); f.playing(); f.session.foregroundReady(); f.session.link(); f.tokens()
@@ -219,16 +219,16 @@ class PresenceSessionTest {
     @Test fun `refresh marker failure never sends refresh and cannot silently reconnect`() {
         val f = Fixture(); f.link(); f.vault.markerWritable = false
         f.emit(SdkEvent.Expired(f.sdk.generation)); f.advance(100_000)
-        assertEquals(0, f.sdk.refreshes); assertFalse(f.sdk.isOpen); assertTrue(f.screen.auth is Auth.Failed)
+        assertEquals(0, f.sdk.refreshes); assertFalse(f.sdk.isOpen); assertEquals(Auth.Failed(AuthIssue.StorageWriteFailed), f.screen.auth)
     }
     @Test fun `refresh write failure discards rotated credentials`() {
         val f = Fixture(); f.link(); f.emit(SdkEvent.Expired(f.sdk.generation)); f.vault.writable = false; f.tokens()
-        assertFalse(f.sdk.isOpen); assertEquals(1, f.sdk.installs); assertTrue(f.screen.auth is Auth.Failed)
+        assertFalse(f.sdk.isOpen); assertEquals(1, f.sdk.installs); assertEquals(Auth.Failed(AuthIssue.StorageWriteFailed), f.screen.auth)
     }
     @Test fun `ambiguous refresh timeout cannot replay the consumed credentials`() {
         val f = Fixture(); f.link(); f.emit(SdkEvent.Expired(f.sdk.generation))
         f.advance(20_001)
-        assertTrue(f.screen.auth is Auth.Failed)
+        assertEquals(Auth.Failed(AuthIssue.Timeout), f.screen.auth)
         assertEquals(TokenLoad.Empty, f.vault.stored)
         f.session.retry(); f.session.networkChanged(false); f.session.networkChanged(true)
         f.advance(120_000)
@@ -347,7 +347,7 @@ class PresenceSessionTest {
     @Test fun `restart during ambiguous refresh requires link`() {
         val f = Fixture(vault = Vault().apply { stored = TokenLoad.RequiresLink })
         f.session.foregroundReady(); f.session.retry(); f.advance(100_000)
-        assertEquals(0, f.sdk.opens); assertTrue(f.screen.auth is Auth.Failed)
+        assertEquals(0, f.sdk.opens); assertEquals(Auth.Failed(AuthIssue.LinkUnreadable), f.screen.auth)
     }
     @Test fun `unlink ignores late credential and ready callbacks and cancels retry`() {
         val f = Fixture(); f.session.foregroundReady(); f.session.link(); val generation = f.sdk.generation
@@ -400,29 +400,29 @@ class PresenceSessionTest {
         val title = "【雑談/chat】初見さんも大歓迎！マシンガントークでしゃべりまくります【茶々プラムム/vtuber】"
         assertEquals(
             "【雑談/chat】初見さんも大歓迎！マシンガントークでしゃべりまくります【茶々プラムム/vtuber",
-            presenceTitle(title),
+            clampTitle(title),
         )
         val f = Fixture(); f.playing(title)
         assertEquals(Playback.Playing(Video(title)), f.screen.playback)
     }
     @Test fun `presence title preserves complete Japanese characters and emoji at byte limit`() {
-        assertEquals("猫".repeat(42), presenceTitle("猫".repeat(43)))
-        assertEquals("😀".repeat(32), presenceTitle("😀".repeat(129)))
-        assertEquals("A".repeat(124) + "😀", presenceTitle("A".repeat(124) + "😀B"))
-        assertEquals("A".repeat(125), presenceTitle("A".repeat(125) + "😀B"))
-        assertEquals("A".repeat(125) + "猫", presenceTitle("A".repeat(125) + "猫B"))
-        assertEquals("A".repeat(126), presenceTitle("A".repeat(126) + "猫B"))
-        assertEquals("A".repeat(126) + "é", presenceTitle("A".repeat(126) + "éB"))
-        assertEquals("A".repeat(127), presenceTitle("A".repeat(127) + "éB"))
+        assertEquals("猫".repeat(42), clampTitle("猫".repeat(43)))
+        assertEquals("😀".repeat(32), clampTitle("😀".repeat(129)))
+        assertEquals("A".repeat(124) + "😀", clampTitle("A".repeat(124) + "😀B"))
+        assertEquals("A".repeat(125), clampTitle("A".repeat(125) + "😀B"))
+        assertEquals("A".repeat(125) + "猫", clampTitle("A".repeat(125) + "猫B"))
+        assertEquals("A".repeat(126), clampTitle("A".repeat(126) + "猫B"))
+        assertEquals("A".repeat(126) + "é", clampTitle("A".repeat(126) + "éB"))
+        assertEquals("A".repeat(127), clampTitle("A".repeat(127) + "éB"))
     }
     @Test fun `presence title keeps ASCII titles through 128 bytes and trims whitespace`() {
-        assertEquals("AB", presenceTitle(" AB "))
-        assertEquals("A".repeat(128), presenceTitle("A".repeat(128)))
-        assertEquals("A".repeat(128), presenceTitle("A".repeat(129)))
+        assertEquals("AB", clampTitle(" AB "))
+        assertEquals("A".repeat(128), clampTitle("A".repeat(128)))
+        assertEquals("A".repeat(128), clampTitle("A".repeat(129)))
     }
-    @Test fun `presence title retains single character prefix`() {
-        assertEquals("動画: A", presenceTitle(" A "))
-        assertEquals("動画: 猫", presenceTitle("猫"))
-        assertEquals("動画: 😀", presenceTitle("😀"))
+    @Test fun `presence title keeps a single character unchanged`() {
+        assertEquals("A", clampTitle(" A "))
+        assertEquals("猫", clampTitle("猫"))
+        assertEquals("😀", clampTitle("😀"))
     }
 }
