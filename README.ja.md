@@ -113,3 +113,9 @@ python3 scripts/verify_background.py --serial SERIAL --evidence-dir /tmp/presenc
 ## ライセンス
 
 MIT ライセンスです。[LICENSE](LICENSE) を参照してください。
+
+## リリース APK
+
+リリースビルドは、リポジトリ直下に `keystore.properties` がある場合だけ署名されます。ない場合は `app-release-unsigned.apk` が生成され、Android にはインストールできません。`keystore.properties` と署名鍵は Git 管理対象外です。署名鍵をリポジトリ外に保管してください。鍵を失うと、インストール済みの端末を更新できなくなります。
+
+リリースは APK を添付し、GitHub の immutable release として公開します。公開後はタグと添付ファイルが変更できません。ダウンロードした APK は、リリースノートに記載した SHA-256 と署名証明書のフィンガープリントで確認してください。

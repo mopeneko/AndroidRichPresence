@@ -19,3 +19,4 @@ local.properties
 .envrc
 .kotlin/
 __pycache__/
+keystore.properties

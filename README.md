@@ -37,6 +37,45 @@ Without the AAR the default build fails on purpose. A monitor-only build needs n
 
 The two variants share `app/src/main` and differ only in `app/src/discord` and `app/src/monitorOnly`. There is no automatic fallback from one to the other.
 
+## Build a release APK
+
+Release builds are signed only when `keystore.properties` exists in the repository root. Without it, `:app:assembleRelease` produces `app-release-unsigned.apk` and Android will not install it.
+
+```properties
+storeFile=/absolute/path/to/release.jks
+storePassword=…
+keyAlias=…
+keyPassword=…
+```
+
+Create the key once and keep it. Android identifies an app by its signing key, so a new key means users must uninstall before they can update:
+
+```sh
+keytool -genkeypair -keystore release.jks -alias androidrichpresence \
+  -keyalg RSA -keysize 4096 -validity 10000
+```
+
+```sh
+./gradlew :app:assembleRelease
+python3 scripts/check_release_apk.py app/build/outputs/apk/release/app-release.apk
+```
+
+`keystore.properties` and `*.jks` are gitignored. Never commit either one, and back up the keystore outside the repository. Losing it means you can never update an installed copy.
+
+The release build enables R8 and keeps `packageScope` at `**`. Restricting it to `androidx`, `kotlin`, or `kotlinx` produces an APK that crashes at startup with `IllegalAccessError` from `InitializationProvider`, because those classes get split from the app classes that extend them.
+
+## Published releases
+
+Releases carry the APK as an asset and are immutable. GitHub locks the tag and the asset once published, and refuses to reuse the tag name even after deletion. Each release also gets an attestation that binds the tag, the commit, and the asset digests.
+
+Download `androidrichpresence-<version>.apk` and confirm it against the digest printed in the release notes before you install:
+
+```sh
+sha256sum androidrichpresence-<version>.apk
+```
+
+Builds are signed by the certificate with SHA-256 fingerprint `29:BB:B3:CC:45:74:51:57:E8:B0:08:D2:A9:A6:2A:D4:D4:EA:E3:CD:7D:45:A7:9E:E5:77:35:84:42:73:EE:36`. A different fingerprint means the file is not from this project. Sideloaded builds are not distributed through Google Play and do not update themselves.
+
 ## Use
 
 1. Open the app and tap 通知へのアクセス設定を開く to grant notification access.

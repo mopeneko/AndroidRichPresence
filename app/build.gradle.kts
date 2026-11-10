@@ -1,3 +1,4 @@
+import java.util.Properties
 import java.util.zip.ZipFile
 
 plugins {
@@ -9,6 +10,11 @@ val monitorOnly = providers.gradleProperty("presenceMonitorOnly").map { it.toBoo
 val discordSdk = file("libs/discord_partner_sdk.aar")
 if (!monitorOnly && !discordSdk.isFile) {
     throw GradleException("Discord Social SDK 1.10+ の Android AAR を app/libs/discord_partner_sdk.aar に配置してください。監視だけをビルドする場合は -PpresenceMonitorOnly=true を明示してください。")
+}
+
+val releaseKeystore = Properties().apply {
+    val file = rootProject.file("keystore.properties")
+    if (file.isFile) file.inputStream().use(::load)
 }
 
 android {
@@ -57,8 +63,21 @@ android {
         release {
             optimization {
                 enable = true
-                packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")
+                // Leave packageScope at "**". Restricting it to androidx/kotlin splits those
+                // classes from the app classes that extend them, and the release APK then
+                // dies in InitializationProvider with IllegalAccessError.
             }
+        }
+    }
+    signingConfigs {
+        if (releaseKeystore.isNotEmpty()) {
+            create("release") {
+                storeFile = file(releaseKeystore.getProperty("storeFile"))
+                storePassword = releaseKeystore.getProperty("storePassword")
+                keyAlias = releaseKeystore.getProperty("keyAlias")
+                keyPassword = releaseKeystore.getProperty("keyPassword")
+            }
+            buildTypes.getByName("release").signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
