@@ -21,8 +21,8 @@ A monitor-only build cannot verify Discord authorization or delivery. Never subs
 adb devices -l
 ```
 
-Prefer the user-authorized physical device `<serial from adb devices -l>`, especially for Discord journeys that depend on existing authentication.
-Confirm it appears as `device` in `adb devices -l`, then set and export `VERIFY_SERIAL=<serial from adb devices -l>`.
+Prefer a physical device the owner has authorized, especially for Discord journeys that depend on existing authentication.
+Read its serial from `adb devices -l`, then set and export `VERIFY_SERIAL` to it.
 Use the existing installation and account state first. Do not treat an untested emulator login as evidence that real-device authentication is unavailable.
 For isolated checks without Discord authentication, `Pixel_10a` is an optional fallback.
 List emulators with `android emulator list`. If starting one, record ownership and read its actual serial from `adb devices -l`.

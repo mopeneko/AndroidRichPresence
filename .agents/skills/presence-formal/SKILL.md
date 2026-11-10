@@ -8,13 +8,10 @@ description: Assess formal-verification readiness when AndroidRichPresence gains
 ## Current coverage
 
 No property is formally verified. No verifier or model is installed.
-At commit `eae67cbd271748ba2631b2a52b28e34fe2ee4505`, production code consists of MainActivity, Greeting, GreetingPreview, and Compose theme code.
-`MainActivity.onCreate` renders `Greeting("Android")`.
-There is no presence lifecycle, asynchronous connection, retry loop, parser, or credential storage to model.
-A model of hypothetical Discord behavior would not verify this application.
+The skill was last reassessed against the greeting-only app at `eae67cbd271748ba2631b2a52b28e34fe2ee4505`. Presence, connection, retry, and credential code has since landed, so that assessment no longer describes the code.
 This readiness skill is not an executed formal-verification deliverable.
 
-## Reassess after implementation
+## Reassess
 
 Run from the repository root.
 
@@ -25,7 +22,6 @@ rg -n 'class |fun |sealed |enum |CoroutineScope|launch|async|WebSocket|token|ret
 ```
 
 Read the actual implementation and call sites. Search output alone does not establish correctness.
-If the app is still only the greeting, report that no eligible target exists and stop.
 Do not invent a state machine or call unit tests formal proof.
 When relevant logic exists, use `/create-formal-verification-skill` to replace this document with an executable check for the strongest implemented property.
 For event ordering, prefer TLA+ model checking. For input correctness, prefer a verifier of the real code where available.
