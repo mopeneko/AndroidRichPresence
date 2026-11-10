@@ -4,6 +4,8 @@
 
 Android の YouTube メディアセッションから動画タイトル・再生・一時停止を取得し、連携した Discord アカウントの Rich Presence に共有します。日本語の画面で公式 YouTube または Morphe を選択できます。共有をオフにしたまま、再生情報の確認や Discord との連携もできます。
 
+<img src="docs/screenshot.png" alt="AndroidRichPresence が公開した YouTube の動画タイトルと再生状態が、Discord モバイルのプロフィールにアクティビティとして表示されている" width="360">
+
 ## 使い方
 
 1. アプリを開き、「通知へのアクセス設定を開く」からアクセスを許可します。
