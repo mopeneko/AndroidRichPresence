@@ -4,7 +4,7 @@ Share the YouTube video you are watching as Discord Rich Presence from an Androi
 
 The app reads the video title and play state from the media session of a YouTube app you select. When you link a Discord account and turn sharing on, it publishes that state through the Discord Social SDK. You can keep sharing off and still check what the app detects, or link Discord without publishing anything.
 
-日本語の詳細は [README.ja.md](README.ja.md) にあります。It also records the limits measured on a real device.
+Japanese notes, including what was measured on a real device, are in [README.ja.md](README.ja.md).
 
 ## Status
 
