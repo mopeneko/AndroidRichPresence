@@ -16,4 +16,6 @@ local.properties
 
 /app/libs/*.aar
 /.audit/
+.envrc
+.kotlin/
 __pycache__/
