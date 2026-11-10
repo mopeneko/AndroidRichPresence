@@ -80,9 +80,9 @@ Builds are signed by the certificate with SHA-256 fingerprint `29:BB:B3:CC:45:74
 
 ## Use
 
-1. Open the app and tap 通知へのアクセス設定を開く to grant notification access.
+1. Open the app and tap **Open notification access settings** to grant notification access.
 2. Enter the package name of the YouTube app you use, or pick a preset, then save.
-3. Tap Discordと連携 and approve the request in Discord's own consent screen.
+3. Tap **Link Discord** and approve the request in Discord's own consent screen.
 4. Turn sharing on and start a video in the selected app.
 5. Check the result in a Discord client, on your own profile.
 
@@ -109,7 +109,7 @@ The restriction returns after reinstalling from a file manager, so repeat the fo
 
 Pausing keeps the title and switches the state to paused. Stopping playback, losing the session, a missing title, buffering, losing the notification listener, or turning sharing off all request that the presence be cleared. The app never guesses a video URL.
 
-連携を解除 deletes this device's stored credentials and closes the connection. It does not revoke the OAuth grant. Revoke that in Discord's authorized apps settings.
+**Unlink and delete the data on this device** deletes this device's stored credentials and closes the connection. It does not revoke the OAuth grant. Revoke that in Discord's authorized apps settings.
 
 ## Connect your own Discord application
 
@@ -141,7 +141,7 @@ Access and refresh tokens are encrypted with AES/GCM under a key in the Android 
 
 One owner in the process serializes authentication and publishing. The notification listener only watches media, so rotating the screen or reconnecting the listener does not rebuild the auth owner. Updates run one at a time and coalesce waiting changes onto the latest state. An update that gets no answer in 15 seconds discards the whole SDK client and rebuilds the authenticated connection. Retries run at 1, 2, 4, 8, 16, and 32 seconds, then at most once every 60 seconds. Frequent playback changes do not reset that backoff.
 
-`ClearRichPresence()` has no acknowledgement. "表示の消去を要求しました" means the request was sent, not that Discord removed the activity. Force-stopping the app or letting Android kill it gives no guarantee of an immediate clear. [README.ja.md](README.ja.md) records what was measured on a device and which conditions stay unproven.
+`ClearRichPresence()` has no acknowledgement. "Clear requested. Discord has not confirmed the removal" means the request was sent, not that Discord removed the activity. Force-stopping the app or letting Android kill it gives no guarantee of an immediate clear. [README.ja.md](README.ja.md) records what was measured on a device and which conditions stay unproven.
 
 ## Verification scripts
 

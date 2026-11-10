@@ -1,3 +1,67 @@
 <resources>
-    <string name="app_name">AndroidRichPresence</string>
+    <string name="app_name" translatable="false">AndroidRichPresence</string>
+    <string name="title_app" translatable="false">YouTube Presence</string>
+    <string name="preset_morphe" translatable="false">Morphe</string>
+
+    <string name="action_link_discord">Link Discord</string>
+    <string name="action_unlink">Unlink and delete the data on this device</string>
+    <string name="label_share_to_discord">Share to Discord</string>
+    <string name="notice_monitor_only">This is a monitor-only build. It cannot send to Discord, but you can still check what the app detects.</string>
+
+    <string name="notification_access_granted">Notification access is granted</string>
+    <string name="notification_access_required">Grant notification access</string>
+    <string name="notification_access_explanation">Android grants access to all notifications. This app reads media information only from the YouTube app you choose.</string>
+    <string name="restricted_settings_help">If the switch says \"Controlled by Restricted Setting\" and does not move, Android is restricting apps installed outside the store. This app cannot lift that restriction. Open AndroidRichPresence in the Apps screen of Android settings, choose \"Allow restricted settings\" from the top-right menu, then try again.</string>
+    <string name="action_open_notification_access">Open notification access settings</string>
+    <string name="action_open_app_settings">Open this app\'s settings</string>
+
+    <string name="label_package_to_monitor">YouTube package to monitor</string>
+    <string name="preset_official_youtube">Official YouTube</string>
+    <string name="label_current_source">Monitoring: %1$s</string>
+    <string name="action_save">Save settings</string>
+    <string name="action_retry_delivery">Retry sending to Discord</string>
+    <string name="notice_background_limits">Behavior after a force stop or an Android-initiated kill is not guaranteed. When playback buffers, stops, or cannot be read, the app asks Discord to clear the presence.</string>
+
+    <string name="card_playback_title">Playback read from this device</string>
+    <string name="playback_none">No video</string>
+    <string name="playback_state_none">Stopped or not detected</string>
+    <string name="playback_title_missing">Title unavailable</string>
+    <string name="playback_state_missing">Missing information</string>
+    <string name="playback_state_playing">Playing</string>
+    <string name="playback_state_paused">Paused</string>
+    <string name="playback_title_pending">Title not read yet</string>
+    <string name="playback_state_buffering">Buffering</string>
+    <string name="monitor_connected">Monitoring service connected</string>
+    <string name="monitor_disconnected">Monitoring service not connected</string>
+
+    <string name="delivery_idle">Nothing sent to Discord yet</string>
+    <string name="delivery_updating">Sending an update to Discord</string>
+    <string name="delivery_clear_pending">Waiting for the update to finish, then clears the presence</string>
+    <string name="delivery_clear_requested">Clear requested. Discord has not confirmed the removal</string>
+    <string name="delivery_accepted">Discord accepted the update. Check the presence in a Discord client</string>
+    <string name="delivery_recovering">Reconnecting to Discord (attempt %1$d)</string>
+    <string name="delivery_clear_failed">The presence could not be cleared. The connection closes.</string>
+
+    <string name="auth_unlinked">Discord is not linked</string>
+    <string name="auth_needs_foreground">Open the app to resume the Discord connection</string>
+    <string name="auth_authorizing">Checking the Discord link</string>
+    <string name="auth_connecting">Connecting to Discord</string>
+    <string name="auth_ready">Connected to Discord</string>
+    <string name="auth_refreshing">Refreshing the Discord connection</string>
+    <string name="auth_monitor_only">This is a monitor-only build</string>
+
+    <string name="auth_issue_link_unreadable">The saved link cannot be read. Link Discord again.</string>
+    <string name="auth_issue_storage_unavailable">The link cannot be saved. Check the free storage on this device.</string>
+    <string name="auth_issue_unlink_failed">The saved link could not be deleted. Unlink again.</string>
+    <string name="auth_issue_credentials_rejected">Authentication failed. Link Discord again.</string>
+    <string name="auth_issue_storage_write_failed">The link cannot be saved. Link Discord again.</string>
+    <string name="auth_issue_auth_rejected">Authentication did not finish. Link Discord again.</string>
+    <string name="auth_issue_timeout">Authentication could not finish. Link Discord again.</string>
+
+    <string name="blocked_sharing_off">Sharing to Discord is off</string>
+    <string name="blocked_monitor_disconnected">The monitoring service is not connected</string>
+    <string name="blocked_discord_not_ready">Link Discord and check the connection</string>
+
+    <string name="presence_title_short">Video: %1$s</string>
+    <string name="notification_listener_label">YouTube playback</string>
 </resources>

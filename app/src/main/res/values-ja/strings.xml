@@ -1,0 +1,63 @@
+<resources>
+    <string name="action_link_discord">Discordと連携</string>
+    <string name="action_unlink">連携を解除（端末の情報を削除）</string>
+    <string name="label_share_to_discord">Discord に共有</string>
+    <string name="notice_monitor_only">監視専用ビルドのため、Discord には送信できません。再生情報の確認は利用できます。</string>
+
+    <string name="notification_access_granted">通知へのアクセスは許可済みです</string>
+    <string name="notification_access_required">通知へのアクセスを許可してください</string>
+    <string name="notification_access_explanation">Android は通知全体へのアクセスを許可します。このアプリは指定した YouTube アプリのメディア情報だけを読み取ります。</string>
+    <string name="restricted_settings_help">設定画面のスイッチが「Controlled by Restricted Setting」と表示されて操作できない場合は、ストア以外からインストールしたアプリへの Android の制限です。このアプリでは解除できません。Android の設定で「アプリ」から AndroidRichPresence を開き、右上のメニューから「Allow restricted settings」（制限付き設定を許可）を選んでから、もう一度お試しください。</string>
+    <string name="action_open_notification_access">通知へのアクセス設定を開く</string>
+    <string name="action_open_app_settings">このアプリの設定を開く</string>
+
+    <string name="label_package_to_monitor">監視する YouTube のパッケージ名</string>
+    <string name="preset_official_youtube">公式 YouTube</string>
+    <string name="label_current_source">現在の監視対象: %1$s</string>
+    <string name="action_save">設定を保存</string>
+    <string name="action_retry_delivery">Discord への送信を再試行</string>
+    <string name="notice_background_limits">アプリの強制停止や Android による終了後の動作は保証できません。バッファリング・停止・情報の取得不能時は表示の消去を要求します。</string>
+
+    <string name="card_playback_title">取得した再生情報</string>
+    <string name="playback_none">動画はありません</string>
+    <string name="playback_state_none">停止・未検出</string>
+    <string name="playback_title_missing">タイトルを取得できません</string>
+    <string name="playback_state_missing">情報不足</string>
+    <string name="playback_state_playing">再生中</string>
+    <string name="playback_state_paused">一時停止</string>
+    <string name="playback_title_pending">タイトル未取得</string>
+    <string name="playback_state_buffering">バッファリング</string>
+    <string name="monitor_connected">監視サービス接続済み</string>
+    <string name="monitor_disconnected">監視サービス未接続</string>
+
+    <string name="delivery_idle">Discord への送信はまだありません</string>
+    <string name="delivery_updating">Discord に更新を送信中</string>
+    <string name="delivery_clear_pending">更新の完了を待って表示を消去します</string>
+    <string name="delivery_clear_requested">表示の消去を要求しました。Discord 側の消去は未確認です</string>
+    <string name="delivery_accepted">Discord が更新を受け付けました。プロフィールの表示は Discord で確認してください</string>
+    <string name="delivery_recovering">Discord に再接続しています（%1$d 回目）</string>
+    <string name="delivery_clear_failed">表示の消去を要求できませんでした。接続を閉じます</string>
+
+    <string name="auth_unlinked">Discord は未連携です</string>
+    <string name="auth_needs_foreground">画面を開いて Discord への接続を再開してください</string>
+    <string name="auth_authorizing">Discord との連携を確認しています</string>
+    <string name="auth_connecting">Discord に接続しています</string>
+    <string name="auth_ready">Discord に接続済みです</string>
+    <string name="auth_refreshing">Discord への接続を更新しています</string>
+    <string name="auth_monitor_only">監視専用ビルドです</string>
+
+    <string name="auth_issue_link_unreadable">連携情報を確認できません。再連携してください</string>
+    <string name="auth_issue_storage_unavailable">連携情報を保存できません。端末の空き容量を確認してください</string>
+    <string name="auth_issue_unlink_failed">連携情報の削除に失敗しました。もう一度解除してください</string>
+    <string name="auth_issue_credentials_rejected">認証に失敗しました。再連携してください</string>
+    <string name="auth_issue_storage_write_failed">連携情報を保存できません。再連携してください</string>
+    <string name="auth_issue_auth_rejected">認証が完了しませんでした。Discord と再連携してください</string>
+    <string name="auth_issue_timeout">認証を完了できませんでした。再連携してください</string>
+
+    <string name="blocked_sharing_off">Discord への共有はオフです</string>
+    <string name="blocked_monitor_disconnected">監視サービスは未接続です</string>
+    <string name="blocked_discord_not_ready">Discord と連携して接続を確認してください</string>
+
+    <string name="presence_title_short">動画: %1$s</string>
+    <string name="notification_listener_label">YouTube の再生情報</string>
+</resources>

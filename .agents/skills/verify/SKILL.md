@@ -7,6 +7,7 @@ description: Build and drive AndroidRichPresence primarily on the authorized phy
 
 Run from the repository root. Read [the feature map](features/README.md).
 The app displays `YouTube Presence`, monitors a selected YouTube app, and can share playback with a linked Discord account.
+Screen text follows the device locale, with English as the default and Japanese in `values-ja`. The labels below are the English defaults. To check the Japanese screen, run `adb shell cmd locale set-app-locales cc.lem0n.androidrichpresence --locales ja-JP` and restart the app.
 
 ## Launch
 

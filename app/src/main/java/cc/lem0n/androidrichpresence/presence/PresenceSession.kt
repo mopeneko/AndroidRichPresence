@@ -34,7 +34,7 @@ internal class PresenceSession(
         if (!sdk.available) state = state.copy(auth = Auth.MonitorOnly)
         else when (val saved = vault.load()) {
             TokenLoad.Empty -> Unit
-            TokenLoad.RequiresLink -> state = state.copy(auth = Auth.Failed("連携情報を確認できません。再連携してください"))
+            TokenLoad.RequiresLink -> state = state.copy(auth = Auth.Failed(AuthIssue.LinkUnreadable))
             is TokenLoad.Stored -> {
                 tokens = saved.tokens
                 wanted = true
@@ -91,7 +91,7 @@ internal class PresenceSession(
         tokens?.destroy()
         tokens = null
         refreshRequired = false
-        if (!vault.erase()) { requireLink("連携情報を保存できません。端末の空き容量を確認してください"); return }
+        if (!vault.erase()) { requireLink(AuthIssue.StorageUnavailable); return }
         open()
         state = state.copy(auth = Auth.Authorizing)
         deadline = elapsedNow() + 180_000
@@ -112,14 +112,14 @@ internal class PresenceSession(
             runCatching { sdk.clear() }
                 .onSuccess { if (it) state = state.copy(delivery = Delivery.ClearRequested) }
                 .onFailure {
-                    state = state.copy(delivery = Delivery.Failed("表示の消去を要求できませんでした。接続を閉じます"))
+                    state = state.copy(delivery = Delivery.Failed)
                 }
         }
         tokens?.destroy()
         tokens = null
         refreshRequired = false
         val erased = vault.erase()
-        state = state.copy(auth = if (erased) Auth.Unlinked else Auth.Failed("連携情報の削除に失敗しました。もう一度解除してください"), operation = 0)
+        state = state.copy(auth = if (erased) Auth.Unlinked else Auth.Failed(AuthIssue.UnlinkFailed), operation = 0)
         closeAt = if (sdk.isOpen) elapsedNow() + 700 else 0
         render()
     }
@@ -142,12 +142,12 @@ internal class PresenceSession(
             is SdkEvent.Tokens -> {
                 if (state.auth !in listOf(Auth.Authorizing, Auth.Exchanging, Auth.Refreshing)) { event.destroy(); return }
                 if (event.access.isEmpty() || event.refresh.isEmpty() || event.expiresInSeconds <= 0) {
-                    event.destroy(); requireLink("認証に失敗しました。再連携してください"); return
+                    event.destroy(); requireLink(AuthIssue.CredentialsRejected); return
                 }
                 val replacement = SecretTokenPair(event.access, event.refresh, epochNow() + event.expiresInSeconds * 1000)
                 if (!vault.replace(replacement)) {
                     replacement.destroy()
-                    requireLink("連携情報を保存できません。再連携してください")
+                    requireLink(AuthIssue.StorageWriteFailed)
                     return
                 }
                 tokens?.destroy()
@@ -190,7 +190,7 @@ internal class PresenceSession(
                 if (ready && desired() == accepted && !clearBarrier)
                     state = state.copy(delivery = Delivery.Accepted(operation.presence))
             }
-            is SdkEvent.AuthFailed -> { requireLink("認証が完了しませんでした。Discord と再連携してください"); return }
+            is SdkEvent.AuthFailed -> { requireLink(AuthIssue.AuthRejected); return }
         }
         reconcile()
     }
@@ -206,7 +206,7 @@ internal class PresenceSession(
         if (pendingDeadline != 0L && time >= pendingDeadline) { recover(); return }
         if (deadline != 0L && time >= deadline) {
             if (state.auth in listOf(Auth.Authorizing, Auth.Exchanging, Auth.Refreshing))
-                requireLink("認証を完了できませんでした。再連携してください")
+                requireLink(AuthIssue.Timeout)
             else recover()
             return
         }
@@ -216,7 +216,7 @@ internal class PresenceSession(
 
     fun failure() {
         if (state.auth in listOf(Auth.Authorizing, Auth.Exchanging, Auth.Refreshing))
-            requireLink("認証を完了できませんでした。再連携してください")
+            requireLink(AuthIssue.Timeout)
         else if (wanted) recover()
         else { destroyClient(); render() }
     }
@@ -246,7 +246,7 @@ internal class PresenceSession(
         open()
         state = state.copy(auth = Auth.Refreshing, operation = 0)
         deadline = elapsedNow() + 20_000
-        if (!vault.markRefreshing()) { requireLink("連携情報を保存できません。再連携してください"); return }
+        if (!vault.markRefreshing()) { requireLink(AuthIssue.StorageWriteFailed); return }
         sdk.refresh(saved.refresh)
     }
     private fun destroyClient() {
@@ -259,14 +259,14 @@ internal class PresenceSession(
         deadline = 0
         state = state.copy(operation = 0)
     }
-    private fun requireLink(message: String) {
+    private fun requireLink(issue: AuthIssue) {
         wanted = false
         retryAt = 0
         destroyClient()
         tokens?.destroy()
         tokens = null
         vault.erase()
-        state = state.copy(auth = Auth.Failed(message), delivery = Delivery.Idle)
+        state = state.copy(auth = Auth.Failed(issue), delivery = Delivery.Idle)
         render()
     }
     private fun recover() {
@@ -303,10 +303,10 @@ internal class PresenceSession(
         render()
     }
     private fun render() {
-        state = state.copy(blockedReason = when {
-            !settings.enabled -> "Discord への共有はオフです"
-            !state.connected -> "監視サービスは未接続です"
-            state.auth != Auth.Ready -> "Discord と連携して接続を確認してください"
+        state = state.copy(blocker = when {
+            !settings.enabled -> Blocker.SharingOff
+            !state.connected -> Blocker.MonitorDisconnected
+            state.auth != Auth.Ready -> Blocker.NotReady
             else -> null
         })
         publish(state)

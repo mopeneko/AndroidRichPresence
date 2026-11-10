@@ -17,6 +17,7 @@ fun Playback.presence(): Presence? = when (this) {
     else -> null
 }
 
+enum class AuthIssue { LinkUnreadable, StorageUnavailable, UnlinkFailed, CredentialsRejected, StorageWriteFailed, AuthRejected, Timeout }
 sealed interface Auth {
     data object Unlinked : Auth
     data object NeedsForeground : Auth
@@ -27,7 +28,7 @@ sealed interface Auth {
     data object Ready : Auth
     data object Refreshing : Auth
     data object MonitorOnly : Auth
-    data class Failed(val reason: String) : Auth
+    data class Failed(val issue: AuthIssue) : Auth
 }
 sealed interface Delivery {
     data object Idle : Delivery
@@ -36,24 +37,23 @@ sealed interface Delivery {
     data object ClearRequested : Delivery
     data class Accepted(val presence: Presence) : Delivery
     data class Recovering(val attempt: Int) : Delivery
-    data class Failed(val reason: String) : Delivery
+    data object Failed : Delivery
 }
 data class Settings(
     val enabled: Boolean = false,
     val packageName: String = "com.google.android.youtube",
 )
+enum class Blocker { SharingOff, MonitorDisconnected, NotReady }
 data class ScreenState(
     val auth: Auth = Auth.Unlinked,
     val operation: Long = 0,
     val connected: Boolean = false,
     val playback: Playback = Playback.NoSession,
     val delivery: Delivery = Delivery.Idle,
-    val blockedReason: String? = "監視サービスは未接続です",
+    val blocker: Blocker? = Blocker.MonitorDisconnected,
 )
-fun presenceTitle(title: String): String {
+fun clampTitle(title: String): String {
     val clean = title.trim()
-    val length = clean.codePointCount(0, clean.length)
-    if (length == 1) return "動画: $clean"
     val utf8 = clean.toByteArray(Charsets.UTF_8)
     if (utf8.size <= 128) return clean
     var end = 128

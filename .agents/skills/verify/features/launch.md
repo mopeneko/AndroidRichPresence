@@ -3,7 +3,7 @@
 Complete the parent skill's build, ownership, installation, and doctor steps first.
 
 1. Launch AndroidRichPresence. Capture the layout and inspect a screenshot showing `YouTube Presence` without a covering dialog.
-2. Confirm the normal build shows an authentication status, or the explicit monitor build shows `監視専用ビルドです` and disables linking.
+2. Confirm the normal build shows an authentication status, or the explicit monitor build shows `This is a monitor-only build` and disables linking.
 3. Press Home and capture activity state proving MainActivity left the foreground.
 4. Reopen and capture the layout and resumed activity. Confirm the title and saved settings remain visible.
 

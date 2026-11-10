@@ -13,12 +13,12 @@ internal class DiscordBridge : SdkPort {
     }
     override val available = supported
     override val isOpen = false
-    override fun open(generation: Long): Unit = error("監視専用ビルドです")
-    override fun authorize(): Unit = error("監視専用ビルドです")
-    override fun install(access: ByteArray): Unit = error("監視専用ビルドです")
-    override fun refresh(refresh: ByteArray): Unit = error("監視専用ビルドです")
-    override fun connect(): Unit = error("監視専用ビルドです")
-    override fun update(operation: Long, presence: Presence): Unit = error("監視専用ビルドです")
+    override fun open(generation: Long): Unit = error("Discord is unavailable in monitor-only builds")
+    override fun authorize(): Unit = error("Discord is unavailable in monitor-only builds")
+    override fun install(access: ByteArray): Unit = error("Discord is unavailable in monitor-only builds")
+    override fun refresh(refresh: ByteArray): Unit = error("Discord is unavailable in monitor-only builds")
+    override fun connect(): Unit = error("Discord is unavailable in monitor-only builds")
+    override fun update(operation: Long, presence: Presence): Unit = error("Discord is unavailable in monitor-only builds")
     override fun clear() = false
     override fun close() = Unit
     override fun poll() = emptyList<SdkEvent>()
