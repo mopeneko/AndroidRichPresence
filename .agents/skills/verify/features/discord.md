@@ -9,15 +9,15 @@ If an account is unavailable, attempt linking, capture the login page without cr
 
 ## Link, share, and unlink
 
-1. On a fresh normal installation, confirm `Discord は未連携です`, sharing off, and retry disabled.
-2. Toggle `Discord に共有` on and off. Confirm the switch persists after reopening. Sharing alone must not authenticate an unlinked account.
-3. Tap `Discordと連携`, complete official consent, and confirm `Discord に接続済みです`. Linking is available while sharing stays off.
+1. On a fresh normal installation, confirm `Discord is not linked`, sharing off, and retry disabled.
+2. Toggle `Share to Discord` on and off. Confirm the switch persists after reopening. Sharing alone must not authenticate an unlinked account.
+3. Tap `Link Discord`, complete official consent, and confirm `Connected to Discord`. Linking is available while sharing stays off.
 4. Enable sharing and run the monitoring feature's playback script with `--require-discord-accepted`. Require matching title and playback state in SDK acceptance. Inspect the actual profile in a separate Discord client.
-5. Turn sharing off. Check the clear request and continued local monitoring. `表示の消去を要求しました` explicitly does not confirm remote disappearance.
+5. Turn sharing off. Check the clear request and continued local monitoring. `Clear requested. Discord has not confirmed the removal` explicitly does not confirm remote disappearance.
 6. With sharing enabled, stopped playback, session loss, missing metadata, buffering, and listener disconnection request clearing. Exercise available fixtures and inspect the remote profile separately.
-7. Unlink the account linked for this run with `連携を解除（端末の情報を削除）`. Confirm Unlinked after restart. This deletes local credentials and closes the connection, but does not revoke the remote OAuth grant.
+7. Unlink the account linked for this run with `Unlink and delete the data on this device`. Confirm Unlinked after restart. This deletes local credentials and closes the connection, but does not revoke the remote OAuth grant.
 
-`Discord への送信を再試行` is enabled only for an authentication failure. Record the actual effect if reached, rather than assuming it reconnects. Recoverable connection failures use automatic retries. Token refresh failures can require relinking.
+`Retry sending to Discord` is enabled only for an authentication failure. Record the actual effect if reached, rather than assuming it reconnects. Recoverable connection failures use automatic retries. Token refresh failures can require relinking.
 
 ## Background recovery and process exit
 
