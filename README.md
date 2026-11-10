@@ -64,15 +64,17 @@ python3 scripts/check_release_apk.py app/build/outputs/apk/release/app-release.a
 
 The release build enables R8 and keeps `packageScope` at `**`. Restricting it to `androidx`, `kotlin`, or `kotlinx` produces an APK that crashes at startup with `IllegalAccessError` from `InitializationProvider`, because those classes get split from the app classes that extend them.
 
-## Published releases
+## Install a release
 
-Releases carry the APK as an asset and are immutable. GitHub locks the tag and the asset once published, and refuses to reuse the tag name even after deletion. Each release also gets an attestation that binds the tag, the commit, and the asset digests.
-
-Download `androidrichpresence-<version>.apk` and confirm it against the digest printed in the release notes before you install:
+The APK is attached to [the latest release](https://github.com/mopeneko/AndroidRichPresence/releases/latest). Download `androidrichpresence-<version>.apk` and confirm it against the digest printed in the release notes before you install:
 
 ```sh
 sha256sum androidrichpresence-<version>.apk
 ```
+
+## Published releases
+
+Releases carry the APK as an asset and are immutable. GitHub locks the tag and the asset once published, and refuses to reuse the tag name even after deletion. Each release also gets an attestation that binds the tag, the commit, and the asset digests.
 
 Builds are signed by the certificate with SHA-256 fingerprint `29:BB:B3:CC:45:74:51:57:E8:B0:08:D2:A9:A6:2A:D4:D4:EA:E3:CD:7D:45:A7:9E:E5:77:35:84:42:73:EE:36`. A different fingerprint means the file is not from this project. Sideloaded builds are not distributed through Google Play and do not update themselves.
 
