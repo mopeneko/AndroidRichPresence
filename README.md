@@ -6,6 +6,8 @@ The app reads the video title and play state from the media session of a YouTube
 
 Japanese notes, including what was measured on a real device, are in [README.ja.md](README.ja.md).
 
+<img src="docs/screenshot.png" alt="A Discord mobile profile showing a YouTube video and its play state as the activity, published by AndroidRichPresence" width="360">
+
 ## Status
 
 This is a personal project, published as source. It is not on Google Play, has no installer, and ships no Discord SDK binaries. Expect rough edges and breaking changes.
