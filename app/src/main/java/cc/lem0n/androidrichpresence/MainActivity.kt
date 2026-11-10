@@ -2,6 +2,7 @@ package cc.lem0n.androidrichpresence
 
 import android.content.ComponentName
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.os.Build
 import android.service.notification.NotificationListenerService
@@ -82,9 +83,19 @@ class MainActivity : ComponentActivity() {
                         Text(if (notificationAccess) "通知へのアクセスは許可済みです" else "通知へのアクセスを許可してください")
                         Text("Android は通知全体へのアクセスを許可します。このアプリは指定した YouTube アプリのメディア情報だけを読み取ります。",
                             style = MaterialTheme.typography.bodySmall)
+                        if (!notificationAccess) {
+                            Text("設定画面のスイッチが「Controlled by Restricted Setting」と表示されて操作できない場合は、ストア以外からインストールしたアプリへの Android の制限です。このアプリでは解除できません。Android の設定で「アプリ」から AndroidRichPresence を開き、右上のメニューから「Allow restricted settings」（制限付き設定を許可）を選んでから、もう一度お試しください。",
+                                style = MaterialTheme.typography.bodySmall)
+                        }
                         OutlinedButton(onClick = {
                             startActivity(Intent(AndroidSettings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
                         }) { Text("通知へのアクセス設定を開く") }
+                        if (!notificationAccess) {
+                            OutlinedButton(onClick = {
+                                startActivity(Intent(AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                    Uri.fromParts("package", this@MainActivity.packageName, null)))
+                            }) { Text("このアプリの設定を開く") }
+                        }
                         StatusCard(screen)
                         OutlinedTextField(value = packageName, onValueChange = { packageName = it },
                             label = { Text("監視する YouTube のパッケージ名") }, singleLine = true,

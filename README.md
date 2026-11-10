@@ -86,6 +86,27 @@ Builds are signed by the certificate with SHA-256 fingerprint `29:BB:B3:CC:45:74
 4. Turn sharing on and start a video in the selected app.
 5. Check the result in a Discord client, on your own profile.
 
+### If notification access is greyed out
+
+On Android 13 and later, the switch reads **Controlled by Restricted Setting** and cannot be moved when the app was installed from outside a store, which includes installing the release APK with a file manager. Android blocks notification access for sideloaded apps until you allow it. The app cannot detect this state and cannot clear it, so it shows instructions instead.
+
+Allow it once per install:
+
+1. Open **Settings**, then **Apps**, then **AndroidRichPresence**.
+2. Tap the ⋮ menu in the top right.
+3. Tap **Allow restricted settings** and confirm with your screen lock.
+4. Return to the notification access screen and turn the switch on.
+
+The app has a このアプリの設定を開く button on its main screen that opens step 1 directly.
+
+If the ⋮ menu has no **Allow restricted settings** entry, the install came from a store or from `adb install`, and this restriction does not apply. Installing with `adb install` leaves no restriction, so it is the simpler route for a test device:
+
+```sh
+adb install androidrichpresence-<version>.apk
+```
+
+The restriction returns after reinstalling from a file manager, so repeat the four steps.
+
 Pausing keeps the title and switches the state to paused. Stopping playback, losing the session, a missing title, buffering, losing the notification listener, or turning sharing off all request that the presence be cleared. The app never guesses a video URL.
 
 連携を解除 deletes this device's stored credentials and closes the connection. It does not revoke the OAuth grant. Revoke that in Discord's authorized apps settings.
