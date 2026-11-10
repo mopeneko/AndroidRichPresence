@@ -33,9 +33,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import cc.lem0n.androidrichpresence.discord.DiscordBridge
 import cc.lem0n.androidrichpresence.presence.Auth
+import cc.lem0n.androidrichpresence.presence.AuthIssue
+import cc.lem0n.androidrichpresence.presence.Blocker
 import cc.lem0n.androidrichpresence.presence.Delivery
 import cc.lem0n.androidrichpresence.presence.Playback
 import cc.lem0n.androidrichpresence.presence.PresenceRuntime
@@ -61,57 +64,57 @@ class MainActivity : ComponentActivity() {
                 Scaffold(modifier = Modifier.fillMaxSize()) { padding ->
                     Column(Modifier.padding(padding).verticalScroll(rememberScrollState()).padding(20.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Text("YouTube Presence", style = MaterialTheme.typography.headlineSmall)
-                        Text(authLabel(screen.auth))
+                        Text(stringResource(R.string.title_app), style = MaterialTheme.typography.headlineSmall)
+                        Text(authText(screen.auth))
                         Button(enabled = DiscordBridge.supported && screen.auth !in listOf(Auth.Authorizing,
                             Auth.Exchanging, Auth.Installing, Auth.Connecting, Auth.Refreshing, Auth.Ready),
-                            onClick = { runtime.authorize() }) { Text("Discordと連携") }
+                            onClick = { runtime.authorize() }) { Text(stringResource(R.string.action_link_discord)) }
                         if (screen.auth !in listOf(Auth.Unlinked, Auth.MonitorOnly)) {
-                            OutlinedButton(onClick = { runtime.disconnect() }) { Text("連携を解除（端末の情報を削除）") }
+                            OutlinedButton(onClick = { runtime.disconnect() }) { Text(stringResource(R.string.action_unlink)) }
                         }
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Discord に共有", modifier = Modifier.padding(top = 12.dp))
+                            Text(stringResource(R.string.label_share_to_discord), modifier = Modifier.padding(top = 12.dp))
                             Switch(checked = saved.enabled, onCheckedChange = {
                                 saved = saved.copy(enabled = it)
                                 PresenceStore.save(this@MainActivity, saved)
                             })
                         }
                         if (!DiscordBridge.supported) {
-                            Text("監視専用ビルドのため、Discord には送信できません。再生情報の確認は利用できます。",
+                            Text(stringResource(R.string.notice_monitor_only),
                                 color = MaterialTheme.colorScheme.error)
                         }
-                        Text(if (notificationAccess) "通知へのアクセスは許可済みです" else "通知へのアクセスを許可してください")
-                        Text("Android は通知全体へのアクセスを許可します。このアプリは指定した YouTube アプリのメディア情報だけを読み取ります。",
+                        Text(stringResource(if (notificationAccess) R.string.notification_access_granted else R.string.notification_access_required))
+                        Text(stringResource(R.string.notification_access_explanation),
                             style = MaterialTheme.typography.bodySmall)
                         if (!notificationAccess) {
-                            Text("設定画面のスイッチが「Controlled by Restricted Setting」と表示されて操作できない場合は、ストア以外からインストールしたアプリへの Android の制限です。このアプリでは解除できません。Android の設定で「アプリ」から AndroidRichPresence を開き、右上のメニューから「Allow restricted settings」（制限付き設定を許可）を選んでから、もう一度お試しください。",
+                            Text(stringResource(R.string.restricted_settings_help),
                                 style = MaterialTheme.typography.bodySmall)
                         }
                         OutlinedButton(onClick = {
                             startActivity(Intent(AndroidSettings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-                        }) { Text("通知へのアクセス設定を開く") }
+                        }) { Text(stringResource(R.string.action_open_notification_access)) }
                         if (!notificationAccess) {
                             OutlinedButton(onClick = {
                                 startActivity(Intent(AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS,
                                     Uri.fromParts("package", this@MainActivity.packageName, null)))
-                            }) { Text("このアプリの設定を開く") }
+                            }) { Text(stringResource(R.string.action_open_app_settings)) }
                         }
                         StatusCard(screen)
                         OutlinedTextField(value = packageName, onValueChange = { packageName = it },
-                            label = { Text("監視する YouTube のパッケージ名") }, singleLine = true,
+                            label = { Text(stringResource(R.string.label_package_to_monitor)) }, singleLine = true,
                             isError = !packageValid, modifier = Modifier.fillMaxWidth())
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(onClick = { packageName = "com.google.android.youtube" }) { Text("公式 YouTube") }
-                            OutlinedButton(onClick = { packageName = "app.morphe.android.youtube" }) { Text("Morphe") }
+                            OutlinedButton(onClick = { packageName = "com.google.android.youtube" }) { Text(stringResource(R.string.preset_official_youtube)) }
+                            OutlinedButton(onClick = { packageName = "app.morphe.android.youtube" }) { Text(stringResource(R.string.preset_morphe)) }
                         }
-                        Text("現在の監視対象: ${saved.packageName}", style = MaterialTheme.typography.bodySmall)
+                        Text(stringResource(R.string.label_current_source, saved.packageName), style = MaterialTheme.typography.bodySmall)
                         Button(enabled = packageValid, onClick = {
                             saved = saved.copy(packageName = packageName.trim())
                             PresenceStore.save(this@MainActivity, saved)
-                        }) { Text("設定を保存") }
+                        }) { Text(stringResource(R.string.action_save)) }
                         OutlinedButton(enabled = screen.auth is Auth.Failed,
-                            onClick = { runtime.retry() }) { Text("Discord への送信を再試行") }
-                        Text("アプリの強制停止や Android による終了後の動作は保証できません。バッファリング・停止・情報の取得不能時は表示の消去を要求します。",
+                            onClick = { runtime.retry() }) { Text(stringResource(R.string.action_retry_delivery)) }
+                        Text(stringResource(R.string.notice_background_limits),
                             style = MaterialTheme.typography.bodySmall)
                     }
                 }
@@ -145,38 +148,68 @@ class MainActivity : ComponentActivity() {
 private fun StatusCard(screen: ScreenState) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("取得した再生情報", style = MaterialTheme.typography.titleMedium)
-            val (title, state) = when (val playback = screen.playback) {
-                Playback.NoSession -> "動画はありません" to "停止・未検出"
-                Playback.MissingMetadata -> "タイトルを取得できません" to "情報不足"
-                is Playback.Playing -> playback.video.title to "再生中"
-                is Playback.Paused -> playback.video.title to "一時停止"
-                is Playback.Buffering -> (playback.video?.title ?: "タイトル未取得") to "バッファリング"
-            }
-            Text(title)
-            Text(state)
-            Text(if (screen.connected) "監視サービス接続済み" else "監視サービス未接続")
-            screen.blockedReason?.let { Text(it) }
-            Text(when (val delivery = screen.delivery) {
-                Delivery.Idle -> "Discord への送信はまだありません"
-                Delivery.Updating -> "Discord に更新を送信中"
-                Delivery.ClearPending -> "更新の完了を待って表示を消去します"
-                Delivery.ClearRequested -> "表示の消去を要求しました。Discord 側の消去は未確認です"
-                is Delivery.Accepted -> "Discord が更新を受け付けました。プロフィールの表示は Discord で確認してください"
-                is Delivery.Failed -> delivery.reason
-                is Delivery.Recovering -> "Discord に再接続しています（${delivery.attempt} 回目）"
-            })
+            Text(stringResource(R.string.card_playback_title), style = MaterialTheme.typography.titleMedium)
+            Text(playbackTitle(screen.playback))
+            Text(playbackState(screen.playback))
+            Text(stringResource(if (screen.connected) R.string.monitor_connected else R.string.monitor_disconnected))
+            screen.blocker?.let { Text(blockerText(it)) }
+            Text(deliveryText(screen.delivery))
         }
     }
 }
 
-private fun authLabel(auth: Auth): String = when (auth) {
-    Auth.Unlinked -> "Discord は未連携です"
-    Auth.NeedsForeground -> "画面を開いて Discord への接続を再開してください"
-    Auth.Authorizing, Auth.Exchanging -> "Discord との連携を確認しています"
-    Auth.Installing, Auth.Connecting -> "Discord に接続しています"
-    Auth.Ready -> "Discord に接続済みです"
-    Auth.Refreshing -> "Discord への接続を更新しています"
-    Auth.MonitorOnly -> "監視専用ビルドです"
-    is Auth.Failed -> auth.reason
+@Composable
+private fun playbackTitle(playback: Playback): String = when (playback) {
+    Playback.NoSession -> stringResource(R.string.playback_none)
+    Playback.MissingMetadata -> stringResource(R.string.playback_title_missing)
+    is Playback.Playing -> playback.video.title
+    is Playback.Paused -> playback.video.title
+    is Playback.Buffering -> playback.video?.title ?: stringResource(R.string.playback_title_pending)
+}
+
+@Composable
+private fun playbackState(playback: Playback): String = when (playback) {
+    Playback.NoSession -> stringResource(R.string.playback_state_none)
+    Playback.MissingMetadata -> stringResource(R.string.playback_state_missing)
+    is Playback.Playing -> stringResource(R.string.playback_state_playing)
+    is Playback.Paused -> stringResource(R.string.playback_state_paused)
+    is Playback.Buffering -> stringResource(R.string.playback_state_buffering)
+}
+
+@Composable
+private fun deliveryText(delivery: Delivery): String = when (delivery) {
+    Delivery.Idle -> stringResource(R.string.delivery_idle)
+    Delivery.Updating -> stringResource(R.string.delivery_updating)
+    Delivery.ClearPending -> stringResource(R.string.delivery_clear_pending)
+    Delivery.ClearRequested -> stringResource(R.string.delivery_clear_requested)
+    is Delivery.Accepted -> stringResource(R.string.delivery_accepted)
+    Delivery.Failed -> stringResource(R.string.delivery_clear_failed)
+    is Delivery.Recovering -> stringResource(R.string.delivery_recovering, delivery.attempt)
+}
+
+@Composable
+private fun blockerText(blocker: Blocker): String = when (blocker) {
+    Blocker.SharingOff -> stringResource(R.string.blocked_sharing_off)
+    Blocker.MonitorDisconnected -> stringResource(R.string.blocked_monitor_disconnected)
+    Blocker.NotReady -> stringResource(R.string.blocked_discord_not_ready)
+}
+
+@Composable
+private fun authText(auth: Auth): String = when (auth) {
+    Auth.Unlinked -> stringResource(R.string.auth_unlinked)
+    Auth.NeedsForeground -> stringResource(R.string.auth_needs_foreground)
+    Auth.Authorizing, Auth.Exchanging -> stringResource(R.string.auth_authorizing)
+    Auth.Installing, Auth.Connecting -> stringResource(R.string.auth_connecting)
+    Auth.Ready -> stringResource(R.string.auth_ready)
+    Auth.Refreshing -> stringResource(R.string.auth_refreshing)
+    Auth.MonitorOnly -> stringResource(R.string.auth_monitor_only)
+    is Auth.Failed -> stringResource(when (auth.issue) {
+        AuthIssue.LinkUnreadable -> R.string.auth_issue_link_unreadable
+        AuthIssue.StorageUnavailable -> R.string.auth_issue_storage_unavailable
+        AuthIssue.UnlinkFailed -> R.string.auth_issue_unlink_failed
+        AuthIssue.CredentialsRejected -> R.string.auth_issue_credentials_rejected
+        AuthIssue.StorageWriteFailed -> R.string.auth_issue_storage_write_failed
+        AuthIssue.AuthRejected -> R.string.auth_issue_auth_rejected
+        AuthIssue.Timeout -> R.string.auth_issue_timeout
+    })
 }

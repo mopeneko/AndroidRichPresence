@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.ActivityNotFoundException
 import android.os.Bundle
 import android.os.Looper
+import cc.lem0n.androidrichpresence.R
 import cc.lem0n.androidrichpresence.presence.*
 import com.discord.socialsdk.DiscordSocialSdkInit
 import java.io.ByteArrayInputStream
@@ -17,8 +18,10 @@ internal class DiscordBridge : SdkPort {
     companion object {
         const val supported = true
         private var host: SdkContextActivity? = null
+        private var appContext: Context? = null
         fun initializeBackground(context: Context): Boolean {
             check(Looper.myLooper() == Looper.getMainLooper())
+            appContext = context.applicationContext
             if (host == null) {
                 System.loadLibrary("presence_bridge")
                 val value = SdkContextActivity(context.applicationContext)
@@ -54,7 +57,10 @@ internal class DiscordBridge : SdkPort {
     override fun refresh(refresh: ByteArray) = nativeRefresh(handle, refresh)
     override fun connect() = nativeConnect(handle)
     override fun update(operation: Long, presence: Presence) {
-        val title = presenceTitle(presence.video.title).toByteArray(Charsets.UTF_8)
+        val clean = clampTitle(presence.video.title)
+        val details = if (clean.codePointCount(0, clean.length) == 1)
+            appContext?.getString(R.string.presence_title_short, clean) ?: clean else clean
+        val title = details.toByteArray(Charsets.UTF_8)
         nativeUpdate(handle, operation, title, presence.playing)
     }
     override fun clear() = isOpen && nativeClear(handle)
