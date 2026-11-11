@@ -4,6 +4,8 @@
 
 Use the normal SDK build and a designated Discord test account. The configured application `1567132201588367360` needs Public Client and redirect `discord-1567132201588367360:/authorize/callback` in Discord's developer settings.
 Complete browser onboarding if necessary. Enter credentials only in the official Discord interface and avoid recording secrets.
+On a device whose Chrome has never run, `Link Discord` can open Chrome's own first-run screen before the Discord page. Tap `Stay signed out`, then dismiss Chrome's `Viewing full screen` hint with `Got it`. Only then does the Discord login page appear; a screenshot of the first-run screen is not evidence about linking.
+The link handshake needs no Discord account to observe: the tap moves the status to `Checking the Discord link` (`auth=Authorizing`) and sends the OAuth URL to Chrome. An abandoned authorization ends in `Authentication could not finish. Link Discord again.` (`auth=Failed(issue=Timeout)`) after 180 seconds, which proves the deadline without credentials.
 Playback delivery additionally requires notification access, a connected listener, a selected player, and current titled playback.
 If an account is unavailable, attempt linking, capture the login page without credentials, and record subsequent authenticated journeys as unreachable for that prerequisite.
 
@@ -15,14 +17,15 @@ If an account is unavailable, attempt linking, capture the login page without cr
 4. Enable sharing and run the monitoring feature's playback script with `--require-discord-accepted`. Require matching title and playback state in SDK acceptance. Inspect the actual profile in a separate Discord client.
 5. Turn sharing off. Check the clear request and continued local monitoring. `Clear requested. Discord has not confirmed the removal` explicitly does not confirm remote disappearance.
 6. With sharing enabled, stopped playback, session loss, missing metadata, buffering, and listener disconnection request clearing. Exercise available fixtures and inspect the remote profile separately.
-7. Unlink the account linked for this run with `Unlink and delete the data on this device`. Confirm Unlinked after restart. This deletes local credentials and closes the connection, but does not revoke the remote OAuth grant.
+7. Unlink the account linked for this run with `Unlink and delete the data on this device`. Confirm Unlinked after restart. This deletes local credentials, closes the connection, and also issues a clear request while the client is still open, so a delivery line about an unconfirmed clear can remain until the next state change. It does not revoke the remote OAuth grant.
 
-`Retry sending to Discord` is enabled only for an authentication failure. Record the actual effect if reached, rather than assuming it reconnects. Recoverable connection failures use automatic retries. Token refresh failures can require relinking.
+`Retry sending to Discord` is enabled only for `Auth.Failed`, which includes the storage-only `UnlinkFailed` issue, not just authentication failures. Its guard requires a saved token and an open-ended session, and every path that produces `Auth.Failed` has already destroyed the token, so the button is a proven no-op: tapping it leaves the state unchanged. `Link Discord` is the only recovery. Record what it does rather than assuming it reconnects. Recoverable connection failures use automatic retries. Token refresh failures can require relinking.
 
 ## Background recovery and process exit
 
 Require a saved authenticated link, sharing enabled, connected monitoring, and current playing or paused media.
-Follow the opt-in `BackgroundPresenceTest` instrumentation commands in the repository README, with `backgroundPresence=true` and `backgroundObserveSeconds=240`.
+Follow the opt-in `BackgroundPresenceTest` instrumentation commands in `README.ja.md` ("画面を開かない復旧を検証する"), with `backgroundPresence=true` and `backgroundObserveSeconds=240`. The English `README.md` documents the three Python scripts only and has no instrumentation command.
+Without `backgroundPresence=true` the test skips rather than passes. `backgroundObserveSeconds` defaults to `0`, and a value outside `0..600` fails the test instead of skipping it.
 Require connection and matching SDK acceptance without launching MainActivity.
 
 While instrumentation observes the background publisher, the following script tests recovery after a 160-second outage:
@@ -45,4 +48,4 @@ The script screenshots `$VERIFY_SERIAL`. A profile open only on a separate clien
 This force-stops both publisher and player. Inspect screenshots for profile disappearance, and retain the observed duration rather than promising immediate clearing after process death.
 Doctor and restore the intended app state before another drive. Pause any remaining playback and close test authorization tabs at teardown.
 
-Source entry points: `PresenceRuntime`, `PresenceSession`, `discord/DiscordBridge.kt`, `discord_bridge.cpp`, and `BackgroundPresenceTest.kt` under `app/src/`. The three verification scripts live in the repository's `scripts/` directory.
+Source entry points: `PresenceRuntime` and `PresenceSession` in `app/src/main/java/cc/lem0n/androidrichpresence/presence/`, `DiscordBridge.kt` in `app/src/discord/java/cc/lem0n/androidrichpresence/discord/` (a second stub `DiscordBridge.kt` in `app/src/monitorOnly/java/` is selected for monitor-only builds and never carries Discord journeys), `discord_bridge.cpp` in `app/src/discord/cpp/`, and `BackgroundPresenceTest.kt` in `app/src/androidTest/java/cc/lem0n/androidrichpresence/presence/`. The three verification scripts live in the repository's `scripts/` directory.

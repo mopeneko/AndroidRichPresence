@@ -7,7 +7,7 @@ description: Build and drive AndroidRichPresence primarily on the authorized phy
 
 Run from the repository root. Read [the feature map](features/README.md).
 The app displays `YouTube Presence`, monitors a selected YouTube app, and can share playback with a linked Discord account.
-Screen text follows the device locale, with English as the default and Japanese in `values-ja`. The labels below are the English defaults. To check the Japanese screen, run `adb shell cmd locale set-app-locales cc.lem0n.androidrichpresence --locales ja-JP` and restart the app.
+Screen text follows the device locale, with English as the default and Japanese in `values-ja`. The labels below are the English defaults. To check the Japanese screen, run `adb shell cmd locale set-app-locales cc.lem0n.androidrichpresence --locales ja-JP` and restart the app; `cmd locale get-app-locales` confirms the per-app locale took effect. The app declares no `localeConfig`, but the command works on the verified API 37 device. Reset it with `--locales en-US` when done, or the next run reads Japanese labels.
 
 ## Launch
 
@@ -28,6 +28,13 @@ Use the existing installation and account state first. Do not treat an untested 
 For isolated checks without Discord authentication, `Pixel_10a` is an optional fallback.
 List emulators with `android emulator list`. If starting one, record ownership and read its actual serial from `adb devices -l`.
 Do not double-drive a shared device or assume an emulator serial.
+If `Pixel_10a` is already running under another operator, create your own instead of attaching to it: `android emulator create` writes the AVD, and a fresh data partition gives the clean defaults these checks need.
+The `android emulator start` command takes no port or headless flags. Start the instance directly when you need those, and use the serial `adb devices -l` reports:
+
+```sh
+"$ANDROID_HOME/emulator/emulator" -avd <name> -port 5556 -no-window -no-audio -no-snapshot -read-only &
+adb -s emulator-5556 wait-for-device
+```
 
 ```sh
 VERIFY_EVIDENCE=$(mktemp -d /tmp/android-rich-presence-proof.XXXXXX)
@@ -40,6 +47,13 @@ Preserve the physical device's existing installation, credentials, notification 
 For an existing installation, record its APK identity and build provenance. Do not claim it matches the checkout based on version alone.
 When the task calls for installing a new build, use a normal SDK build and `install -r` to retain app data.
 If an update fails, report it rather than uninstalling or clearing data. Never replace the authenticated installation with a monitor-only build.
+`INSTALL_FAILED_UPDATE_INCOMPATIBLE` means the installed copy was signed with a different key, which is normal when a device carries a release build and you built a debug one. Do not uninstall to get past it on a retained device; start a fresh isolated AVD for the debug build instead, and record which device holds which build.
+Compare the installed APK digest with the local one before driving:
+
+```sh
+adb -s "$VERIFY_SERIAL" pull "$(adb -s "$VERIFY_SERIAL" shell pm path cc.lem0n.androidrichpresence | sed 's/package://' | tr -d '\r')" "$VERIFY_EVIDENCE/installed.apk"
+sha256sum "$VERIFY_EVIDENCE/installed.apk" app/build/outputs/apk/debug/app-debug.apk
+```
 Use an absent package on an isolated emulator for checks that require fresh defaults. Do not copy account credentials between devices.
 Record initial notification access, source package, and sharing state. Discord journeys require a designated test account.
 
@@ -74,7 +88,10 @@ sha256sum app/build/outputs/apk/debug/app-debug.apk
 ```
 
 Expect `device`, boot completion `1`, and MainActivity resumed after launch.
-The template version is versionCode 1 and versionName 1.0. Version alone does not prove build identity.
+This checkout builds versionCode 3 and versionName 1.2. Read the installed values instead of trusting this line, and re-read them if the app is released again. Version alone does not prove build identity.
+Confirm the package is not disabled: `adb -s "$VERIFY_SERIAL" shell pm list packages -d`. A disabled package makes `am start` fail with `Error type 3 ... does not exist` even though `pm path` resolves. Re-enable it with `pm enable` and record that you did.
+A physical device with a PIN or pattern keyguard cannot be driven even when `dumpsys` reports it awake: taps land on the lock screen and layout dumps show `keyguard_*` nodes. Check `adb -s "$VERIFY_SERIAL" shell dumpsys trust | grep -o 'deviceLocked=[01]'`; do not attempt to unlock a device you were not asked to unlock. Use `dumpsys` service state for whatever those journeys can still prove, and move UI driving to an isolated emulator.
+If another operator may be driving the same serial, check it before the first tap and use a different device rather than interleaving input.
 Retain the APK digest, successful install output when applicable, `git rev-parse HEAD`, and `git diff` with the evidence.
 For an existing installation, use `pm path` to locate its APK and record its digest separately from the local build.
 
@@ -82,6 +99,8 @@ For an existing installation, use `pm path` to locate its APK and record its dig
 
 Follow every journey in [the feature map](features/README.md). The stable launch handle is literal text `YouTube Presence`.
 Drive the real activity through Android actions. Scroll to reach controls below the screen.
+Derive each tap coordinate from a layout dump taken immediately before it. Coordinates shift as the keyboard appears, content changes, or a stale scroll offset persists; a tap on a remembered position can open app settings or type into the wrong field. After any unexpected screen, dump the layout and confirm the actual foreground activity before continuing.
+The accessibility tree does not report Compose `enabled` state: every Compose button shows `enabled="true"` and `clickable="false"` whether or not it is visually greyed out. Prove gating by effect and by screenshot, never by those attributes.
 For each journey, record observed results or the attempted route and concrete missing prerequisite.
 An unreachable authenticated flow does not prove delivery or background recovery.
 
@@ -103,6 +122,7 @@ Read their prerequisites in the feature map before running them. This skill does
 ## Cleanup
 
 Pause any media started by the run and close its authorization tab. Restore changed source, sharing, and notification access on retained installations.
+Restore the per-app locale to `en-US` if a run set `ja-JP`; it survives process restarts and would mislabel the next run's assertions.
 Unlink only a test account linked by this run. Unlinking deletes local credentials but does not revoke Discord's OAuth grant.
 On a disposable emulator installation, force-stop this package with `adb -s "$VERIFY_SERIAL" shell am force-stop cc.lem0n.androidrichpresence`.
 On the physical device, preserve services and playback that were running before verification. Do not force-stop them as routine cleanup.
