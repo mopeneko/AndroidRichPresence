@@ -7,7 +7,8 @@ description: Build and drive AndroidRichPresence primarily on the authorized phy
 
 Run from the repository root. Read [the feature map](features/README.md).
 The app displays `YouTube Presence`, monitors a selected YouTube app, and can share playback with a linked Discord account.
-Screen text follows the device locale, with English as the default and Japanese in `values-ja`. The labels below are the English defaults. To check the Japanese screen, run `adb shell cmd locale set-app-locales cc.lem0n.androidrichpresence --locales ja-JP` and restart the app.
+Screen text follows the device locale, with English as the default and Japanese in `values-ja`. The labels below are the English defaults. To check the Japanese screen, run `adb shell cmd locale set-app-locales cc.lem0n.androidrichpresence --locales ja-JP` and restart the app; `cmd locale get-app-locales` confirms the per-app locale took effect. The app declares no `localeConfig`, but the command works on the verified API 37 device. Reset it with `--locales en-US` when done, or the next run reads Japanese labels.
+An empty per-app locale list means the app follows the device locale, so a device set to Japanese shows Japanese labels even with no per-app locale. Version 1.1 hardcoded Japanese and ignored the locale entirely; read the labels from the strings resource of the installed version rather than assuming which language a screenshot will show.
 
 ## Launch
 
@@ -22,12 +23,32 @@ A monitor-only build cannot verify Discord authorization or delivery. Never subs
 adb devices -l
 ```
 
+`assembleDebug` builds a debug-signed APK. When the retained install is the release build, `assembleRelease` is the variant that can upgrade it in place; both are versionCode 3 and versionName 1.2 in this checkout.
+The Discord SDK AAR is not in the repository and cannot be redistributed, so a checkout without `app/libs/discord_partner_sdk.aar` fails the normal build on purpose. Record the AAR's presence rather than switching variants to get a green build.
+
 Prefer a physical device the owner has authorized, especially for Discord journeys that depend on existing authentication.
 Read its serial from `adb devices -l`, then set and export `VERIFY_SERIAL` to it.
 Use the existing installation and account state first. Do not treat an untested emulator login as evidence that real-device authentication is unavailable.
+
+The owner's verification device is a Pixel 7 (`29241FDH20071H`, API 37) that holds:
+- the release-signed app and Morphe `app.morphe.android.youtube` as the saved source;
+- notification access already granted for `cc.lem0n.androidrichpresence/.youtube.YouTubeNotificationListener`;
+- the owner-authorized Discord test account `ARP` (`arp0158`) already signed in to the Discord app, so `Link Discord` goes straight to Discord's own `Authorize` screen. Use this account for every Discord journey and confirm `ARP` on the consent screen before tapping `Authorize`; a different account there is a wrong-account risk, so stop and ask instead;
+- no usable SIM (`getprop gsm.sim.state` is `LOADED,NOT_READY`), which affects `verify_background.py` as described in [the Discord feature](features/discord.md).
+
+Its baseline on handover is unlinked with sharing off; that is deliberate, so a run that needs Discord performs the link itself and can leave the baseline unlinked at teardown. Restore to unlinked, sharing off, Morphe as the saved source, and notification access granted.
+This device unlocks only for its owner. If `dumpsys trust` reports `deviceLocked=1`, stop and ask rather than guessing at a PIN.
+
 For isolated checks without Discord authentication, `Pixel_10a` is an optional fallback.
 List emulators with `android emulator list`. If starting one, record ownership and read its actual serial from `adb devices -l`.
-Do not double-drive a shared device or assume an emulator serial.
+Do not double-drive a shared device or assume an emulator serial. A running emulator may belong to another session, so check its foreground activity before using it.
+If `Pixel_10a` is already running under another operator, create your own instead of attaching to it: `android emulator create` writes the AVD, and a fresh data partition gives the clean defaults these checks need.
+The `android emulator start` command takes no port or headless flags. Start the instance directly when you need those, and use the serial `adb devices -l` reports:
+
+```sh
+"$ANDROID_HOME/emulator/emulator" -avd <name> -port 5556 -no-window -no-audio -no-snapshot -read-only &
+adb -s emulator-5556 wait-for-device
+```
 
 ```sh
 VERIFY_EVIDENCE=$(mktemp -d /tmp/android-rich-presence-proof.XXXXXX)
@@ -40,8 +61,16 @@ Preserve the physical device's existing installation, credentials, notification 
 For an existing installation, record its APK identity and build provenance. Do not claim it matches the checkout based on version alone.
 When the task calls for installing a new build, use a normal SDK build and `install -r` to retain app data.
 If an update fails, report it rather than uninstalling or clearing data. Never replace the authenticated installation with a monitor-only build.
+`INSTALL_FAILED_UPDATE_INCOMPATIBLE` means the installed copy was signed with a different key, which is normal when a device carries a release build and you built a debug one. Do not uninstall to get past it on a retained device; start a fresh isolated AVD for the debug build instead, and record which device holds which build.
+When the retained install was signed with the repository's release key, `apksigner verify --print-certs` on both APKs shows the same digest and `install -r` upgrades it in place, keeping the Discord link, notification access, and saved source. Prefer that over any variant swap, and confirm the link survived by reading `auth=Ready` and `authenticated=true` afterwards.
+Compare the installed APK digest with the local one before driving:
+
+```sh
+adb -s "$VERIFY_SERIAL" pull "$(adb -s "$VERIFY_SERIAL" shell pm path cc.lem0n.androidrichpresence | sed 's/package://' | tr -d '\r')" "$VERIFY_EVIDENCE/installed.apk"
+sha256sum "$VERIFY_EVIDENCE/installed.apk" app/build/outputs/apk/debug/app-debug.apk
+```
 Use an absent package on an isolated emulator for checks that require fresh defaults. Do not copy account credentials between devices.
-Record initial notification access, source package, and sharing state. Discord journeys require a designated test account.
+Record initial notification access, source package, sharing state, and which Discord account is signed in. Discord journeys use `ARP` (`arp0158`).
 
 ```sh
 # Only when installing the build is part of this verification task:
@@ -74,7 +103,10 @@ sha256sum app/build/outputs/apk/debug/app-debug.apk
 ```
 
 Expect `device`, boot completion `1`, and MainActivity resumed after launch.
-The template version is versionCode 1 and versionName 1.0. Version alone does not prove build identity.
+This checkout builds versionCode 3 and versionName 1.2. Read the installed values instead of trusting this line, and re-read them if the app is released again. Version alone does not prove build identity.
+Confirm the package is not disabled: `adb -s "$VERIFY_SERIAL" shell pm list packages -d`. A disabled package makes `am start` fail with `Error type 3 ... does not exist` even though `pm path` resolves. Re-enable it with `pm enable` and record that you did.
+A physical device with a PIN or pattern keyguard cannot be driven even when `dumpsys` reports it awake: taps land on the lock screen and layout dumps show `keyguard_*` nodes. Check `adb -s "$VERIFY_SERIAL" shell dumpsys trust | grep -o 'deviceLocked=[01]'`; do not attempt to unlock a device you were not asked to unlock. Use `dumpsys` service state for whatever those journeys can still prove, and move UI driving to an isolated emulator.
+If another operator may be driving the same serial, check it before the first tap and use a different device rather than interleaving input.
 Retain the APK digest, successful install output when applicable, `git rev-parse HEAD`, and `git diff` with the evidence.
 For an existing installation, use `pm path` to locate its APK and record its digest separately from the local build.
 
@@ -82,6 +114,10 @@ For an existing installation, use `pm path` to locate its APK and record its dig
 
 Follow every journey in [the feature map](features/README.md). The stable launch handle is literal text `YouTube Presence`.
 Drive the real activity through Android actions. Scroll to reach controls below the screen.
+Tap by coordinate derived from the layout dump taken immediately before the tap, and resolve the label to a coordinate each time. A remembered position goes stale as soon as the keyboard opens, content changes, or a scroll offset survives; on this device a stale tap opened the app-settings screen.
+Reading the value of `app.morphe.android.youtube` back as text is the reliable way to confirm a draft change; tapping the `Morphe` preset updates the field without touching `Monitoring:`.
+The accessibility tree does not report Compose `enabled` state: every Compose button shows `enabled="true"` and `clickable="false"` whether or not it is visually greyed out. Prove gating by effect and by screenshot, never by those attributes.
+Discord's `Authorize` screen can take a full screen and a scroll before its button appears. Tap the bottom `Authorize` node found in the current dump, then wait for MainActivity to come back before reading the service dump.
 For each journey, record observed results or the attempted route and concrete missing prerequisite.
 An unreachable authenticated flow does not prove delivery or background recovery.
 
@@ -96,14 +132,18 @@ android screen capture --device="$VERIFY_SERIAL" -o "$VERIFY_EVIDENCE/launch.png
 Visually inspect the PNG. Confirm `YouTube Presence` is visible without a covering dialog.
 Check the action and resulting state together. Settings persist and authorized sharing changes a Discord profile.
 Service diagnostics expose video titles. Review evidence before sharing it and avoid capturing credentials or authorization codes.
-SDK acceptance does not prove profile display. Inspect a separate Discord client to prove the remote result.
+The Discord app on the verified device shows the presence itself: open the profile and look for `Watching AndroidRichPresence` with the video title and play state. That is the remote result, so a separate client is not required when Discord is installed there.
+Discord's UI often never reports idle, so `android layout` fails with `ERROR: could not get idle state` and `uiautomator dump` can leave no file. Fall back to `adb -s "$VERIFY_SERIAL" exec-out screencap -p > "$VERIFY_EVIDENCE/profile.png"` and read the screenshot.
 The repository's `scripts/verify_youtube.py`, `verify_lifecycle.py`, and `verify_background.py` supply optional deeper checks.
 Read their prerequisites in the feature map before running them. This skill does not own those scripts.
 
 ## Cleanup
 
 Pause any media started by the run and close its authorization tab. Restore changed source, sharing, and notification access on retained installations.
+Restore the per-app locale to `en-US` if a run set `ja-JP`; it survives process restarts and would mislabel the next run's assertions.
 Unlink only a test account linked by this run. Unlinking deletes local credentials but does not revoke Discord's OAuth grant.
+The Discord test account is `ARP` (`arp0158`), authorized for this purpose. Leave it signed in to the Discord app; sign it out only if the owner asks. If a run linked AndroidRichPresence, unlink it before handing the device back and say so, since the remote OAuth grant survives an unlink.
+If another account appears on the consent screen, stop before authorizing. Never enter credentials for any account.
 On a disposable emulator installation, force-stop this package with `adb -s "$VERIFY_SERIAL" shell am force-stop cc.lem0n.androidrichpresence`.
 On the physical device, preserve services and playback that were running before verification. Do not force-stop them as routine cleanup.
 If this run installed an absent package, run `adb -s "$VERIFY_SERIAL" uninstall cc.lem0n.androidrichpresence`.
