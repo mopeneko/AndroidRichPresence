@@ -2,7 +2,8 @@
 
 ## Prerequisites
 
-Use the normal SDK build and a designated Discord test account. The configured application `1567132201588367360` needs Public Client and redirect `discord-1567132201588367360:/authorize/callback` in Discord's developer settings.
+Use the normal SDK build and the owner-authorized Discord test account `ARP` (`arp0158`), which is already signed in on the verification device. The configured application `1567132201588367360` needs Public Client and redirect `discord-1567132201588367360:/authorize/callback` in Discord's developer settings.
+Confirm `ARP` on the consent screen rather than authorizing whatever account the browser or app happens to hold.
 Complete browser onboarding if necessary. Enter credentials only in the official Discord interface and avoid recording secrets.
 On a device whose Chrome has never run, `Link Discord` can open Chrome's own first-run screen before the Discord page. Tap `Stay signed out`, then dismiss Chrome's `Viewing full screen` hint with `Got it`. Only then does the Discord login page appear; a screenshot of the first-run screen is not evidence about linking.
 When the Discord app is installed and already signed in, the handshake opens Discord's own `Authorize` screen instead of a browser page: scroll until the consent list ends and tap the `Authorize` button at the bottom. The screen lists the granted scopes (`Update your activity status on Discord` among them) and is the place to confirm which account is being linked; record the account name, never the credentials.

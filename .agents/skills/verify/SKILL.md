@@ -31,12 +31,12 @@ Read its serial from `adb devices -l`, then set and export `VERIFY_SERIAL` to it
 Use the existing installation and account state first. Do not treat an untested emulator login as evidence that real-device authentication is unavailable.
 
 The owner's verification device is a Pixel 7 (`29241FDH20071H`, API 37) that holds:
-- the release-signed app, a linked Discord test account, and Morphe `app.morphe.android.youtube` as the saved source;
+- the release-signed app and Morphe `app.morphe.android.youtube` as the saved source;
 - notification access already granted for `cc.lem0n.androidrichpresence/.youtube.YouTubeNotificationListener`;
-- the Discord app signed in, so `Link Discord` goes straight to Discord's own `Authorize` screen;
+- the owner-authorized Discord test account `ARP` (`arp0158`) already signed in to the Discord app, so `Link Discord` goes straight to Discord's own `Authorize` screen. Use this account for every Discord journey and confirm `ARP` on the consent screen before tapping `Authorize`; a different account there is a wrong-account risk, so stop and ask instead;
 - no usable SIM (`getprop gsm.sim.state` is `LOADED,NOT_READY`), which affects `verify_background.py` as described in [the Discord feature](features/discord.md).
 
-Treat that state as the intended baseline and restore it at teardown: sharing off, unlinked only if this run linked it, Morphe as the saved source, notification access granted. Ask before leaving it linked to a different account.
+Its baseline on handover is unlinked with sharing off; that is deliberate, so a run that needs Discord performs the link itself and can leave the baseline unlinked at teardown. Restore to unlinked, sharing off, Morphe as the saved source, and notification access granted.
 This device unlocks only for its owner. If `dumpsys trust` reports `deviceLocked=1`, stop and ask rather than guessing at a PIN.
 
 For isolated checks without Discord authentication, `Pixel_10a` is an optional fallback.
@@ -70,7 +70,7 @@ adb -s "$VERIFY_SERIAL" pull "$(adb -s "$VERIFY_SERIAL" shell pm path cc.lem0n.a
 sha256sum "$VERIFY_EVIDENCE/installed.apk" app/build/outputs/apk/debug/app-debug.apk
 ```
 Use an absent package on an isolated emulator for checks that require fresh defaults. Do not copy account credentials between devices.
-Record initial notification access, source package, and sharing state. Discord journeys require a designated test account.
+Record initial notification access, source package, sharing state, and which Discord account is signed in. Discord journeys use `ARP` (`arp0158`).
 
 ```sh
 # Only when installing the build is part of this verification task:
@@ -142,6 +142,8 @@ Read their prerequisites in the feature map before running them. This skill does
 Pause any media started by the run and close its authorization tab. Restore changed source, sharing, and notification access on retained installations.
 Restore the per-app locale to `en-US` if a run set `ja-JP`; it survives process restarts and would mislabel the next run's assertions.
 Unlink only a test account linked by this run. Unlinking deletes local credentials but does not revoke Discord's OAuth grant.
+The Discord test account is `ARP` (`arp0158`), authorized for this purpose. Leave it signed in to the Discord app; sign it out only if the owner asks. If a run linked AndroidRichPresence, unlink it before handing the device back and say so, since the remote OAuth grant survives an unlink.
+If another account appears on the consent screen, stop before authorizing. Never enter credentials for any account.
 On a disposable emulator installation, force-stop this package with `adb -s "$VERIFY_SERIAL" shell am force-stop cc.lem0n.androidrichpresence`.
 On the physical device, preserve services and playback that were running before verification. Do not force-stop them as routine cleanup.
 If this run installed an absent package, run `adb -s "$VERIFY_SERIAL" uninstall cc.lem0n.androidrichpresence`.

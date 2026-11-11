@@ -4,9 +4,9 @@
 | --- | --- | --- |
 | [Launch and resume](launch.md) | Launch and return from Home | Visible `YouTube Presence`, build-specific authentication status, and resumed MainActivity. |
 | [Monitoring](monitoring.md) | Source presets, custom validation, persistence, notification access, playback | Saved target, permission and listener state, paired MediaSession and observed playback. |
-| [Discord](discord.md) | Link, sharing, clear, unlink, background recovery, process exit | Auth state, matching SDK acceptance, and separately observed remote profile. |
+| [Discord](discord.md) | Link, sharing, clear, unlink, background recovery, process exit | Auth state, matching SDK acceptance, and the presence read from the Discord profile on the device. |
 
-Record coverage per journey. A monitor-only build cannot prove Discord behavior. Authenticated and background checks require a designated test account; media checks require a usable selected player. Record the route attempted and missing prerequisite for unreachable journeys.
+Record coverage per journey. A monitor-only build cannot prove Discord behavior. Authenticated and background checks require the owner-authorized test account `ARP` (`arp0158`); media checks require a usable selected player. Record the route attempted and missing prerequisite for unreachable journeys.
 
 A run needs one drivable device that holds this checkout's build. Three prerequisites decide that, and each one fails in a way that looks like an app bug:
 
